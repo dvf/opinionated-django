@@ -59,7 +59,6 @@ specs/[###-feature]/
 # [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
 src/
 ├── models/
-├── repositories/
 ├── services/
 ├── cli/
 └── lib/

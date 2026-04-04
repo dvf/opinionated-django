@@ -1,15 +1,18 @@
 <!--
 Sync Impact Report
-- Version change: [PROJECT_NAME] Constitution v0.0.0 (template) -> v1.0.0
+- Version change: future-django Constitution v1.1.0 -> v1.2.0
 - List of modified principles:
-  - PRINCIPLE_1: [PRINCIPLE_1_NAME] -> Dependency Injection (svcs)
-  - PRINCIPLE_2: [PRINCIPLE_2_NAME] -> Repository Pattern
-  - PRINCIPLE_3: [PRINCIPLE_3_NAME] -> Typed Data Transfer (Pydantic)
-  - PRINCIPLE_4: [PRINCIPLE_4_NAME] -> Lean Django Models
-  - PRINCIPLE_5: [PRINCIPLE_5_NAME] -> Modern Execution Environment (uv)
-- Added sections: Technology Stack, Testing Standards
+  - PRINCIPLE_1: Dependency Injection (svcs) (unchanged)
+  - PRINCIPLE_2: Repository Pattern (unchanged)
+  - PRINCIPLE_3: Typed Data Transfer (Pydantic) (unchanged)
+  - PRINCIPLE_4: Lean Django Models (unchanged)
+  - PRINCIPLE_5: Modern Execution Environment (uv) (unchanged)
+  - PRINCIPLE_6: Code Quality and Formatting (ruff) (unchanged)
+  - PRINCIPLE_7: Stripe-style Prefixed ULID Identifiers (NEW)
+  - PRINCIPLE_8: Type Stubs for Django Extensions (.pyi) (renumbered from VII)
+- Added sections: None
 - Removed sections: None
-- Templates requiring updates: 
+- Templates requiring updates:
   - ✅ .specify/templates/plan-template.md (aligned)
   - ✅ .specify/templates/spec-template.md (aligned)
   - ✅ .specify/templates/tasks-template.md (aligned)
@@ -35,13 +38,23 @@ Django models MUST be kept "thin," restricted to schema definitions and basic pe
 ### V. Modern Execution Environment (uv)
 The project MUST use `uv` for all dependency management and application execution. This ensures fast, reliable, and reproducible development and deployment environments across all team members and CI/CD pipelines.
 
+### VI. Code Quality and Formatting (ruff)
+The project MUST use `ruff` for linting, formatting, and import organization. All code MUST pass `ruff check` and `ruff format` before being considered complete. This ensures a consistent style, optimized imports, and prevents common errors across the codebase.
+
+### VII. Stripe-style Prefixed ULID Identifiers
+All models MUST use Stripe-style prefixed ULID strings as primary keys (e.g. `prd_01jq3v...`). Each model declares a `__prefix__` class variable and uses a `CharField(max_length=64)` primary key with a generated default from `project.ids`. UUIDs and auto-incrementing integers are prohibited. New entity prefixes must be short (3-4 chars) and registered in `project.ids`. IDs are opaque strings throughout the stack — DTOs, repositories, services, and API endpoints all use `str`, never `UUID`.
+
+### VIII. Type Stubs for Django Extensions (.pyi)
+The project MUST maintain `.pyi` type stub files for custom extensions to Django's standard types. This applies to patterns where the project adds attributes or methods to Django objects that type checkers cannot infer (e.g., `request.services` added by `SvcsMiddleware`). ORM models and standard Django model definitions are explicitly excluded — stubs are only required for custom middleware augmentations, custom request/response attributes, and similar framework-level extensions. Stubs MUST be kept in sync with their corresponding runtime code and verified by the project's type checker.
+
 ## Technology Stack
 
 The project is built on a modern Python stack:
-- **Framework**: Django 4.2+
+- **Framework**: Django 6.0+
 - **Dependency Injection**: `svcs`
 - **Data Validation/DTOs**: Pydantic v2
 - **Package Management**: `uv`
+- **Linting & Formatting**: `ruff`
 
 ## Testing Standards
 
@@ -58,4 +71,4 @@ The project is built on a modern Python stack:
   - **PATCH**: Clarifications, wording, or non-semantic refinements.
 - **Review**: Every implementation plan MUST include a "Constitution Check" to verify alignment.
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-28 | **Last Amended**: 2026-03-28
+**Version**: 1.2.0 | **Ratified**: 2026-03-28 | **Last Amended**: 2026-04-01
