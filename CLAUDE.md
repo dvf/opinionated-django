@@ -4,7 +4,7 @@ Auto-generated from all feature plans. Last updated: 2026-04-07
 
 ## Active Technologies
 
-- Python 3.14 + Django 6.0.3, django-ninja 1.6.2, svcs 25.1.0, Pydantic v2, python-ulid 3.1.0, Celery
+- Python 3.14 + Django 6.0.3, django-ninja 1.6.2, svcs 25.1.0, Pydantic v2, python-ulid 3.1.0, python-decouple, Celery
 
 ## Project Structure
 

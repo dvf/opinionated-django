@@ -22,6 +22,7 @@ It's a fake e-commerce API (products and orders) that I use as a reference for b
 | [Pydantic v2](https://docs.pydantic.dev/latest/)         | Validation and serialization at the boundary   |
 | [svcs](https://svcs.hynek.me/)                           | Dependency injection without magic             |
 | [python-ulid](https://github.com/mdomke/python-ulid)    | Stripe-style prefixed IDs (`prd_01jq3v...`)    |
+| [python-decouple](https://github.com/HBNetwork/python-decouple) | Settings from environment variables / `.env` |
 
 **Developer Tooling**
 
@@ -248,11 +249,25 @@ Three test layers:
 
 ---
 
-### 6. Dependency Injection with svcs
+### 6. Service Locator with svcs (not "DI" — and that's fine)
 
 Hard-coding `ProductRepository()` in views makes testing annoying. You end up patching imports or mocking at the module level.
 
-[svcs](https://svcs.hynek.me/) gives you a service container scoped to each request. Middleware creates it, views pull from it, cleanup happens automatically.
+[svcs](https://svcs.hynek.me/) gives you a service locator — a registry of factories that knows how to build your objects and wire their dependencies. Hynek (svcs's author) is upfront about this: svcs is explicitly a service locator, not a dependency injection framework.
+
+**The distinction matters:**
+
+- **Dependency injection** pushes dependencies into your code from the outside. Your component declares what it needs (via constructor params) and something else provides them. The component never asks.
+- **Service locator** is the reverse — your code actively pulls dependencies from a container. It calls `get(ProductService)` to obtain what it needs.
+
+**This project uses both patterns, at different layers:**
+
+| Layer | Pattern | Why |
+|-------|---------|-----|
+| **Services** | True DI — repos are passed via `__init__` | Services are testable with plain mocks, no container needed |
+| **Views** | Service locator — `get(ProductService)` | Views are thin dispatchers; the locator keeps them simple |
+
+The service layer is where business logic lives, and that's where true DI pays off. You can test `ProductService` by passing in a mock repo — no container, no framework, no patching. Views are just plumbing; they grab a service and delegate. Making them "pure DI" too would require framework-level wiring (decorators, metaclasses, `Depends()`) for minimal benefit.
 
 ```python
 # Register repos and services at startup

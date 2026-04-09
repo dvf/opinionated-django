@@ -9,6 +9,7 @@ dependencies = [
     "django-ninja>=1.6.2",
     "pydantic>=2.12.5",
     "pytest-django>=4.12.0",
+    "python-decouple>=3.8",
     "python-ulid>=3.1.0",
     "ruff>=0.15.8",
     "svcs>=25.1.0",
