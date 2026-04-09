@@ -4,16 +4,14 @@ from decimal import Decimal
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from project.types import ServiceRequest
+from project.services import get
 
-from ..repositories.product import ProductRepository
 from ..services.product import ProductService
 
 
 @csrf_exempt
-def product_list(request: ServiceRequest):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+def product_list(request):
+    service = get(ProductService)
 
     if request.method == "GET":
         products = service.list_products()
@@ -28,9 +26,8 @@ def product_list(request: ServiceRequest):
 
 
 @csrf_exempt
-def product_detail(request: ServiceRequest, product_id):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+def product_detail(request, product_id):
+    service = get(ProductService)
 
     if request.method == "GET":
         try:

@@ -3,14 +3,11 @@ from typing import List
 
 from ninja import NinjaAPI, Router, Schema, Status
 
-from project.types import ServiceRequest
-
 from orders.dtos.order import OrderDTO
-from orders.repositories.order import OrderRepository
 from orders.services.order import OrderService
 from products.dtos.product import ProductDTO
-from products.repositories.product import ProductRepository
 from products.services.product import ProductService
+from project.services import get
 
 api = NinjaAPI()
 
@@ -26,16 +23,14 @@ class CreateProductIn(Schema):
 
 
 @products_router.get("/", response=List[ProductDTO])
-def list_products(request: ServiceRequest):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+def list_products(request):
+    service = get(ProductService)
     return service.list_products()
 
 
 @products_router.post("/", response={201: ProductDTO})
-def create_product(request: ServiceRequest, payload: CreateProductIn):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+def create_product(request, payload: CreateProductIn):
+    service = get(ProductService)
     return Status(
         201,
         service.create_product(
@@ -45,9 +40,8 @@ def create_product(request: ServiceRequest, payload: CreateProductIn):
 
 
 @products_router.get("/{product_id}/", response=ProductDTO)
-def get_product(request: ServiceRequest, product_id: str):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+def get_product(request, product_id: str):
+    service = get(ProductService)
     return service.get_product(product_id)
 
 
@@ -66,27 +60,21 @@ class CreateOrderIn(Schema):
 
 
 @orders_router.get("/", response=List[OrderDTO])
-def list_orders(request: ServiceRequest):
-    repo = request.services.get(OrderRepository)
-    product_repo = request.services.get(ProductRepository)
-    service = OrderService(repo, product_repo)
+def list_orders(request):
+    service = get(OrderService)
     return service.list_orders()
 
 
 @orders_router.post("/", response={201: OrderDTO})
-def create_order(request: ServiceRequest, payload: CreateOrderIn):
-    repo = request.services.get(OrderRepository)
-    product_repo = request.services.get(ProductRepository)
-    service = OrderService(repo, product_repo)
+def create_order(request, payload: CreateOrderIn):
+    service = get(OrderService)
     items = [item.model_dump() for item in payload.items]
     return Status(201, service.create_order(items=items))
 
 
 @orders_router.get("/{order_id}/", response=OrderDTO)
-def get_order(request: ServiceRequest, order_id: str):
-    repo = request.services.get(OrderRepository)
-    product_repo = request.services.get(ProductRepository)
-    service = OrderService(repo, product_repo)
+def get_order(request, order_id: str):
+    service = get(OrderService)
     return service.get_order(order_id)
 
 

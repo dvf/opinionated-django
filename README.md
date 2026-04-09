@@ -255,48 +255,42 @@ Hard-coding `ProductRepository()` in views makes testing annoying. You end up pa
 [svcs](https://svcs.hynek.me/) gives you a service container scoped to each request. Middleware creates it, views pull from it, cleanup happens automatically.
 
 ```python
-# Register once at startup
+# Register repos and services at startup
 registry = svcs.Registry()
 registry.register_factory(ProductRepository, ProductRepository)
-registry.register_factory(OrderRepository, OrderRepository)
+
+def _product_service_factory(container: svcs.Container) -> ProductService:
+    repo = container.get(ProductRepository)
+    return ProductService(repo)
+
+registry.register_factory(ProductService, _product_service_factory)
+
+def get[T](service_type: type[T]) -> T:
+    return svcs.Container(registry).get(service_type)
 ```
 
 ```python
-# Middleware attaches a container to each request
-class SvcsMiddleware:
-    def __call__(self, request):
-        container = svcs.Container(registry)
-        request.services = container
-        try:
-            return self.get_response(request)
-        finally:
-            container.close()
+# Anywhere — views, Celery tasks, management commands
+from project.services import get
+
+service = get(ProductService)
 ```
 
-```python
-# Views just ask for what they need
-repo = request.services.get(ProductRepository)
-service = ProductService(repo)
-```
-
-No decorators, no metaclasses, no magic.
+No decorators, no metaclasses, no magic. The container wires repos into services for you. And since `get()` is a plain import, it works outside of request context too.
 
 ---
 
-### 7. Type-Safe Requests
+### 7. Type-Safe Service Access
 
 ```python
-class ServiceRequest(HttpRequest):
-    services: svcs.Container
-```
+from project.services import get
 
-```python
 @products_router.get("/", response=List[ProductDTO])
-def list_products(request: ServiceRequest):
-    repo = request.services.get(ProductRepository)  # ← fully typed
+def list_products(request):
+    service = get(ProductService)  # ← fully typed
 ```
 
-`request.services.get(ProductRepository)` resolves to `ProductRepository` in the type checker. Your editor autocompletes it. pyrefly catches mistakes.
+`get(ProductService)` resolves to `ProductService` in the type checker thanks to the generic signature. Your editor autocompletes it. pyrefly catches mistakes.
 
 ---
 
@@ -313,9 +307,8 @@ class CreateProductIn(Schema):
     stock: int
 
 @products_router.post("/", response={201: ProductDTO})
-def create_product(request: ServiceRequest, payload: CreateProductIn):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+def create_product(request, payload: CreateProductIn):
+    service = get(ProductService)
     return Status(201, service.create_product(
         name=payload.name, price=payload.price, stock=payload.stock
     ))
@@ -332,9 +325,7 @@ src/
 ├── project/                   # Config, API, DI, IDs
 │   ├── api.py                 # All routes (django-ninja)
 │   ├── ids.py                 # Prefixed ULID generation
-│   ├── middleware.py           # svcs container lifecycle
-│   ├── services.py             # DI registry
-│   ├── types.py                # ServiceRequest
+│   ├── services.py             # DI registry + get() helper
 │   ├── settings.py
 │   └── urls.py
 ├── products/

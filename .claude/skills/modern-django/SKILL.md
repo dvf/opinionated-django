@@ -117,10 +117,20 @@ Add to `src/project/services.py`:
 
 ```python
 from myapp.repositories.my_entity import MyEntityRepository
+from myapp.services.my_entity import MyEntityService
+
+# Register the repository
 registry.register_factory(MyEntityRepository, MyEntityRepository)
+
+# Register the service with a factory that pulls its repo dependencies
+def _my_entity_service_factory(container: svcs.Container) -> MyEntityService:
+    repo = container.get(MyEntityRepository)
+    return MyEntityService(repo)
+
+registry.register_factory(MyEntityService, _my_entity_service_factory)
 ```
 
-Only repos get registered. Services are constructed in views.
+Both repos and services get registered. Service factories wire up repo dependencies via the container. The `get()` helper at the bottom of the file makes them available anywhere.
 
 ### Layer 7: API Routes
 
@@ -129,12 +139,13 @@ ALL routes go in `src/project/api.py` — NOT in app directories.
 RULES:
 - Input schemas are `ninja.Schema` classes defined in `api.py`
 - Output schemas reuse the DTOs from the app — do not duplicate
-- Request type is `ServiceRequest` on every endpoint
-- Pattern: get repos from `request.services`, build service, delegate, return
+- Pattern: `from project.services import get`, then `get(MyEntityService)` to obtain a wired service
 - `Status(code, data)` for non-200 responses
 - ID path params are `str`
 
 ```python
+from project.services import get
+
 my_router = Router()
 
 class CreateMyEntityIn(Schema):
@@ -142,21 +153,18 @@ class CreateMyEntityIn(Schema):
     # input fields...
 
 @my_router.get("/", response=List[MyEntityDTO])
-def list_entities(request: ServiceRequest):
-    repo = request.services.get(MyEntityRepository)
-    service = MyEntityService(repo)
+def list_entities(request):
+    service = get(MyEntityService)
     return service.list_entities()
 
 @my_router.post("/", response={201: MyEntityDTO})
-def create_entity(request: ServiceRequest, payload: CreateMyEntityIn):
-    repo = request.services.get(MyEntityRepository)
-    service = MyEntityService(repo)
+def create_entity(request, payload: CreateMyEntityIn):
+    service = get(MyEntityService)
     return Status(201, service.create_entity(name=payload.name))
 
 @my_router.get("/{entity_id}/", response=MyEntityDTO)
-def get_entity(request: ServiceRequest, entity_id: str):
-    repo = request.services.get(MyEntityRepository)
-    service = MyEntityService(repo)
+def get_entity(request, entity_id: str):
+    service = get(MyEntityService)
     return service.get_entity(entity_id)
 
 # Mount at bottom of api.py:
@@ -351,8 +359,8 @@ Before reporting done, confirm every item:
 - [ ] DTO: `str` IDs, `from_attributes=True`, RelatedManager coercion if needed
 - [ ] Repository: returns DTOs only, `model_validate()`, `@transaction.atomic` for multi-writes
 - [ ] Service: repos via `__init__`, zero ORM, business logic only
-- [ ] Repo registered in `src/project/services.py`
-- [ ] Routes in `src/project/api.py` with `ServiceRequest` type
+- [ ] Repo and service registered in `src/project/services.py`
+- [ ] Routes in `src/project/api.py` using `from project.services import get`
 - [ ] Admin registered with `list_display`
 - [ ] App in `INSTALLED_APPS` (if new)
 - [ ] Migrations generated and applied

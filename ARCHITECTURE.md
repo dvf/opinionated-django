@@ -267,53 +267,50 @@ class OrderService:
 
 `svcs` provides a service locator container scoped per request.
 
-**Registry** (application startup -- registers factories):
+**Registry** (application startup -- registers factories for repos and services):
 
 ```python
 # src/project/services.py
 import svcs
 from products.repositories.product import ProductRepository
+from products.services.product import ProductService
 from orders.repositories.order import OrderRepository
+from orders.services.order import OrderService
 
 registry = svcs.Registry()
+
+# Repositories
 registry.register_factory(ProductRepository, ProductRepository)
 registry.register_factory(OrderRepository, OrderRepository)
+
+# Services (factories pull repos from the container)
+def _product_service_factory(container: svcs.Container) -> ProductService:
+    repo = container.get(ProductRepository)
+    return ProductService(repo)
+
+def _order_service_factory(container: svcs.Container) -> OrderService:
+    repo = container.get(OrderRepository)
+    product_repo = container.get(ProductRepository)
+    return OrderService(repo, product_repo)
+
+registry.register_factory(ProductService, _product_service_factory)
+registry.register_factory(OrderService, _order_service_factory)
+
+
+def get[T](service_type: type[T]) -> T:
+    """Get a service from the registry. Works anywhere — views, tasks, commands."""
+    return svcs.Container(registry).get(service_type)
 ```
 
-**Middleware** (per-request container lifecycle):
+**Usage** -- import `get` wherever you need a service:
 
 ```python
-# src/project/middleware.py
-import svcs
-from .services import registry
+from project.services import get
 
-class SvcsMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        container = svcs.Container(registry)
-        request.services = container
-        try:
-            return self.get_response(request)
-        finally:
-            container.close()
+service = get(ProductService)
 ```
 
-Add to `MIDDLEWARE` in settings:
-
-```python
-MIDDLEWARE = [
-    # ... standard Django middleware ...
-    "project.middleware.SvcsMiddleware",
-]
-```
-
-**Usage in views** -- retrieve from `request.services`:
-
-```python
-repo = request.services.get(ProductRepository)
-```
+This works in views, Celery tasks, management commands — anywhere.
 
 ### 6. API Endpoints (django-ninja)
 
@@ -323,8 +320,8 @@ All API routes are defined centrally in `project/api.py`. Input schemas use `nin
 # src/project/api.py
 from ninja import Router, Schema, Status
 from products.dtos.product import ProductDTO
-from products.repositories.product import ProductRepository
 from products.services.product import ProductService
+from project.services import get
 
 products_router = Router()
 
@@ -335,14 +332,12 @@ class CreateProductIn(Schema):
 
 @products_router.get("/", response=list[ProductDTO])
 def list_products(request):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+    service = get(ProductService)
     return service.list_products()
 
 @products_router.post("/", response={201: ProductDTO})
 def create_product(request, payload: CreateProductIn):
-    repo = request.services.get(ProductRepository)
-    service = ProductService(repo)
+    service = get(ProductService)
     return Status(201, service.create_product(
         name=payload.name, price=payload.price, stock=payload.stock
     ))

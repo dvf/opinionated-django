@@ -3,18 +3,14 @@ import json
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from project.types import ServiceRequest
-from products.repositories.product import ProductRepository
+from project.services import get
 
-from ..repositories.order import OrderRepository
 from ..services.order import OrderService
 
 
 @csrf_exempt
-def order_list(request: ServiceRequest):
-    repo = request.services.get(OrderRepository)
-    product_repo = request.services.get(ProductRepository)
-    service = OrderService(repo, product_repo)
+def order_list(request):
+    service = get(OrderService)
 
     if request.method == "GET":
         orders = service.list_orders()
@@ -30,10 +26,8 @@ def order_list(request: ServiceRequest):
 
 
 @csrf_exempt
-def order_detail(request: ServiceRequest, order_id):
-    repo = request.services.get(OrderRepository)
-    product_repo = request.services.get(ProductRepository)
-    service = OrderService(repo, product_repo)
+def order_detail(request, order_id):
+    service = get(OrderService)
 
     if request.method == "GET":
         try:
