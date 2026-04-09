@@ -1,0 +1,8 @@
+{
+  "name": "op-django",
+  "description": "Opinionated, fully type-safe Django. The hard-to-type parts of Django — ORM querysets, model instances, related managers — are encapsulated behind repositories that return Pydantic DTOs. Services contain your business logic with zero ORM imports. Views are thin one-liners. Everything is typed end-to-end, testable in isolation, and wired together with uv, svcs, django-ninja, and Celery reliable signals.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Daniel van Flymen"
+  }
+}
