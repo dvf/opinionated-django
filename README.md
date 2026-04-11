@@ -50,6 +50,9 @@ Reliable signals for async side-effects — notifications, cache invalidation, a
 ### ⚙️ `settings`
 Keeps `settings.py` organized with banner-style section headers in a predictable order. Use whenever settings are added, removed, or restructured.
 
+### 🧪 `pytest`
+Three-layer pytest setup — repo against a real DB, service against mocked repos, API through HTTP — with `pytest-django`, `pytest-celery` for reliable-signal receivers, `freezegun` for time-sensitive logic, and a project `conftest.py` full of DTO factories and svcs-override fixtures.
+
 ### ✅ `lint`
 Runs `ruff check`, `ruff format --check`, and `pyrefly check`, then fixes whatever it finds. Use before committing, or any time you want a clean bill of health.
 
