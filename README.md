@@ -1,18 +1,41 @@
 # op-django
 
-> A collection of [Agent Skills](https://vercel.com/kb/guide/agent-skills-creating-installing-and-sharing-reusable-agent-context) that teach a coding agent how to write the kind of Django I like to write.
+> A collection of [Agent Skills](https://vercel.com/kb/guide/agent-skills-creating-installing-and-sharing-reusable-agent-context) that give a coding agent architectural skills to build scalable, maintainable Django projects with clean separation of concerns, testability, and a full suite of best practices.
 
 I love Django, but some parts of it are genuinely hard to type: querysets, model instances, related managers, `F()`/`Q()` expressions, etc. In my experience, the cleanest way to handle this is to keep all the ORM work behind a repository layer that returns Pydantic DTOs. Your business logic lives in services that never import a model. Your views become one-liners, and each layer becomes very easy to mock and test.
 
-After a lot of back-and-forth with friends like [Haki Benita](https://github.com/hakib) and [Pete Nilson](https://github.com/petenilson), this is what I believe to be a reasonable set of patterns for flexible, testable Django projects. It's opinionated, but I've road-tested these patterns on large scale projects in the wild.
+After discussions with my friends [Haki Benita](https://github.com/hakib) and [Pete Nilson](https://github.com/petenilson), this is what I believe to be a reasonable set of patterns for flexible, testable Django projects. It's opinionated, but these patterns have been road-tested on large scale projects in the wild.
+
+## A Layered Approach Using Encapsulation
+
+Each layer encapsulates the one beneath it. The API layer never touches the ORM. Services never import a model. Repositories never leak a queryset or a model instance. Every boundary between layers is crossed as a typed Pydantic DTO, so changes stay local and tests stay fast.
 
 ```
-Request → View → Service → Repository → ORM
-                    ↑           ↑
-               pure logic   typed DTOs out, ORM stays here
+  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+  │   API    │──▶│ Service  │──▶│   DTO    │──▶│   Repo   │──▶│  Model   │
+  └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
+   thin views    business       typed data      ORM lives       
+                 logic + DI     at boundaries   here only       
 ```
 
-The stack: **uv · Django · django-ninja · Pydantic v2 · svcs · python-ulid · Celery · python-decouple · ruff · pyrefly · pytest**.
+| Layer           | Role                                              | Library                                                                                          |
+|-----------------|---------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| **API**         | Routing, input validation, OpenAPI                | [django-ninja](https://django-ninja.dev/)                                                        |
+| **Service**     | Business logic & orchestration with true DI       | [svcs](https://svcs.hynek.me/)                                                                   |
+| **DTO**         | Typed data at every layer boundary                | [Pydantic v2](https://docs.pydantic.dev/)                                                        |
+| **Repository**  | All ORM access, transactions, prefetches          | [Django](https://www.djangoproject.com/)                                                         |
+| **Model**       | Persistence with prefixed ULID primary keys       | [Django](https://www.djangoproject.com/) · [python-ulid](https://github.com/mdomke/python-ulid)  |
+| **Async**       | Reliable signals & background tasks               | [Celery](https://docs.celeryq.dev/)                                                              |
+
+## DX
+
+| Concern                  | Tool                                                                                                                                                                                                               |
+|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Packaging**            | [uv](https://docs.astral.sh/uv/)                                                                                                                                                                                   |
+| **Settings**             | [python-decouple](https://github.com/HBNetwork/python-decouple)                                                                                                                                                    |
+| **Linting & formatting** | [ruff](https://docs.astral.sh/ruff/)                                                                                                                                                                               |
+| **Type checking**        | [pyrefly](https://pyrefly.org/) · [django-stubs](https://github.com/typeddjango/django-stubs)                                                                                                                      |
+| **Testing**              | [pytest](https://docs.pytest.org/) · [pytest-django](https://pytest-django.readthedocs.io/) · [pytest-celery](https://docs.celeryq.dev/projects/pytest-celery/) · [freezegun](https://github.com/spulec/freezegun) |
 
 ## Install
 
@@ -45,7 +68,7 @@ Plain service classes with constructor-injected repositories, wired through an [
 The full feature blueprint. Given a description, the agent scaffolds models, Pydantic DTOs, repositories, services, django-ninja routes, admin registration, and three layers of tests (repo against a real DB, service against mocked repos, API through HTTP). Every convention is spelled out; every layer is non-negotiable.
 
 ### 📡 `signals`
-Reliable signals for async side-effects — notifications, cache invalidation, analytics, cross-service coordination. Receivers are enqueued **inside** the database transaction via Celery, so rollbacks are respected and delivery is at-least-once. Pattern adapted from Haki Benita's write-up.
+Reliable signals for async side-effects — notifications, cache invalidation, analytics, cross-service coordination. Receivers are enqueued **inside** the database transaction via Celery, so rollbacks are respected and delivery is at-least-once. Pattern adapted from Haki Benita's [Reliable Signals in Django](https://hakibenita.com/django-reliable-signals).
 
 ### ⚙️ `settings`
 Keeps `settings.py` organized with banner-style section headers in a predictable order. Use whenever settings are added, removed, or restructured.
@@ -65,11 +88,10 @@ Runs `ruff check`, `ruff format --check`, and `pyrefly check`, then fixes whatev
 - **API** — django-ninja routes centralized in `project/api.py`. Input schemas are `ninja.Schema`, output schemas reuse DTOs.
 - **Reliable Signals** — Side-effects enqueued inside the DB transaction via Celery. At-least-once delivery. Idempotent receivers.
 - **Settings** — Sectioned with banner headers. `python-decouple` for env vars.
-- **Tooling** — `uv` for everything. `ruff` for linting and formatting. `pyrefly` for type checking. `pytest` for tests.
 
 ## Example Project
 
-See [`example_project/`](./example_project/) for a working Django project built with these patterns — two apps (`products`, `orders`), full repository + service + API layering, and tests at all three levels.
+See [`example_project`](./example_project) for a working Django project built with these patterns — two apps (`products`, `orders`), full repository + service + API layering, and tests at all three levels.
 
 ## License
 

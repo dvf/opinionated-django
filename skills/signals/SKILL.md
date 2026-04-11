@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 
 You are adding a reliable signal to an opinionated Django project. Standard Django signals are synchronous and unreliable — receiver failures propagate to the sender, there's no delivery guarantee if the process crashes after commit, and there's no retry. This project uses the reliable signals pattern with Celery instead.
 
-> The pattern implemented here is adapted from Haki Benita's write-up on reliable Django signals. Credit for the original design goes to him — see [hakibenita.com](https://hakibenita.com) for the full article.
+> The pattern implemented here is adapted from Haki Benita's article [Reliable Signals in Django](https://hakibenita.com/django-reliable-signals). Credit for the original design goes to him — read the full article for the rationale and edge cases.
 
 ## How It Works
 
