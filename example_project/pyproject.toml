@@ -18,13 +18,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "django-stubs>=6.0.2",
-    "django-types>=0.23.0",
     "pyrefly>=0.59.0",
-    "pyright>=1.1.408",
 ]
 
-[tool.pyright]
-pythonVersion = "3.14"
-include = ["src"]
-venvPath = "."
-venv = ".venv"
+[tool.pyrefly]
+python-version = "3.14"
+project-includes = ["src"]

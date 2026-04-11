@@ -67,8 +67,10 @@ Use `uv` for everything. Never `pip` or `poetry`.
 ```bash
 uv add 'django>=6.0' 'django-ninja>=1.6' 'pydantic>=2.0' 'svcs>=25.1' \
        'python-ulid>=3.0' 'celery>=5.4' python-decouple
-uv add --dev ruff pyrefly pytest pytest-django
+uv add --dev ruff 'pyrefly>=0.42' django-stubs pytest pytest-django
 ```
+
+Pyrefly auto-recognizes Django constructs as long as `django-stubs` is installed — no plugin, no `mypy_django_plugin`-style config. See [pyrefly.org/en/docs/django](https://pyrefly.org/en/docs/django/) for the current support matrix.
 
 ## Step 2: `src/project/ids.py`
 
@@ -226,12 +228,21 @@ target-version = "py312"
 
 [tool.pyrefly]
 project-includes = ["src"]
+python-version = "3.12"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "project.settings"
 python_files = ["test_*.py"]
 pythonpath = ["src"]
 ```
+
+**Pyrefly + Django caveats** (from [pyrefly.org/en/docs/django](https://pyrefly.org/en/docs/django/)):
+
+- Pyrefly has **built-in** Django support. Install `django-stubs` and it just works — no plugin to enable, no extra `[tool.pyrefly]` keys required.
+- **Reverse relations are not yet supported.** Accessing `user.order_set` (the implicit reverse manager Django generates from a `ForeignKey`) will flag as an attribute error. Work around it in the repository layer by either (a) querying the child model directly — `OrderRepository().list_for_user(user_id)` — or (b) using an explicit `related_name` and a narrow `cast` / `# type: ignore[attr-defined]` at the call site. Do not paper over this in services or DTOs; push it down to the repo.
+- **`ManyRelatedManager` is generic over `[Parent, Model]`** rather than the concrete child type (unlike mypy's django-plugin). For DTO coercion this doesn't matter — the `coerce_related_manager` validator handles it — but don't rely on pyrefly to catch mistyped M2M targets.
+- Django's `QuerySet` typing beyond `.all()` is still thin. Keep chained queryset expressions inside the repository where you can annotate the return type as `list[SomeDTO]` and let the caller rely on that.
+- Pyrefly's Django support is **actively evolving**; re-check the docs when upgrading pyrefly and remove workarounds as they become unnecessary.
 
 ## Step 9: Verify
 
