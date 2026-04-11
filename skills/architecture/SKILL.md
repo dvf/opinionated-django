@@ -1,11 +1,10 @@
 ---
 name: architecture
-description: Implement a Django feature following the opinionated architecture — prefixed ULID IDs, repository pattern, Pydantic DTOs, svcs service locator, project-scoped django-ninja API, Celery reliable signals, and layered tests. Use when the user asks to add a new entity, endpoint, app, or business logic.
-argument-hint: [feature description]
-allowed-tools: Read Write Edit Bash Grep Glob Agent
+description: Implement a Django feature following the opinionated architecture — prefixed ULID IDs, repository pattern, Pydantic DTOs, svcs service locator, project-scoped django-ninja API, Celery reliable signals, and layered tests. Use when the user asks to add a new entity, endpoint, app, or business logic in a Django project that follows these conventions.
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
-# Implement: $ARGUMENTS
+# Implement a Django Feature
 
 You are implementing a feature in an opinionated, fully type-safe Django project managed with `uv`. Every convention below is mandatory. Do not deviate.
 
@@ -13,21 +12,18 @@ You are implementing a feature in an opinionated, fully type-safe Django project
 
 **Tooling:** `uv` is the package manager. All commands use `uv run`. Never use `pip`, `poetry`, or raw `python` — always `uv run python`, `uv run pytest`, etc. To add a dependency: `uv add <package>`.
 
-Current project state:
-
-- Existing ID prefixes: !`grep "generate_.*_id = " src/project/ids.py`
-- Registered repos: !`grep "register_factory" src/project/services.py`
-- Installed apps: !`grep -A 20 "INSTALLED_APPS" src/project/settings.py | grep '"'`
-- Existing routes: !`grep "add_router" src/project/api.py`
-
----
-
 ## BEFORE WRITING CODE
 
-1. Read `ARCHITECTURE.md` for the full pattern reference
-2. Read `src/project/ids.py`, `src/project/services.py`, `src/project/api.py`
-3. Explore any existing app the feature touches
-4. State your implementation plan: models, DTOs, repos, services, routes, tests, and ID prefixes
+Gather current project state by reading:
+
+- `src/project/ids.py` — existing ID prefixes (must be unique)
+- `src/project/services.py` — registered repos/services
+- `src/project/settings.py` — `INSTALLED_APPS`
+- `src/project/api.py` — existing routes
+- `ARCHITECTURE.md` if present — full pattern reference
+- Any existing app the feature touches
+
+Then state your implementation plan: models, DTOs, repos, services, routes, tests, and ID prefixes.
 
 ---
 

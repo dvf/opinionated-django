@@ -1,7 +1,7 @@
 ---
 name: settings
 description: Organize Django settings.py into clearly sectioned blocks with banner-style headers. Use proactively whenever modifying src/project/settings.py — adding new settings, removing settings, or restructuring sections.
-allowed-tools: Read Edit
+allowed-tools: Read, Edit
 ---
 
 # Organize Django Settings

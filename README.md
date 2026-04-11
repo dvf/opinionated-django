@@ -1,6 +1,6 @@
 # op-django
 
-A Claude Code plugin that teaches Claude a set of Django patterns I've found work well in practice.
+A collection of [Agent Skills](https://vercel.com/kb/guide/agent-skills-creating-installing-and-sharing-reusable-agent-context) that teach a coding agent a set of Django patterns I've found work well in practice. Works with any agent harness that supports the Agent Skills format.
 
 ## Why This Exists
 
@@ -20,25 +20,32 @@ Request → View → Service → Repository → ORM
 
 | Skill | Description |
 |-------|-------------|
-| `op-django:architecture` | Full feature scaffolding — models, DTOs, repos, services, routes, admin, and three-layer tests. |
-| `op-django:signals` | Reliable signals (async side-effects via Celery) for post-commit work like notifications or cache invalidation. |
-| `op-django:settings` | Keeps `settings.py` organized with banner-section headers. Auto-triggered when settings are modified. |
-| `op-django:lint` | Runs ruff + pyrefly checks and fixes issues. |
+| `scaffold` | Sets up a new or existing Django project into the op-django layout — `src/project/` shell, svcs registry, reliable-signals base, Celery wiring, and tooling config. Run this first. |
+| `prefixed-ulids` | Stripe-style prefixed ULID primary keys (`prd_01jq3v...`) for every model. Debuggable, time-sortable, and `str` end-to-end. |
+| `services` | Plain service classes with constructor-injected repos, wired through an `svcs` registry and resolved anywhere via `get[T]()`. |
+| `architecture` | Full feature scaffolding — models, DTOs, repos, services, routes, admin, and three-layer tests. |
+| `signals` | Reliable signals (async side-effects via Celery) for post-commit work like notifications or cache invalidation. |
+| `settings` | Keeps `settings.py` organized with banner-section headers. Triggered whenever settings are modified. |
+| `lint` | Runs ruff + pyrefly checks and fixes issues. |
+
+Each skill is a directory under `skills/` with its own `SKILL.md` — load them directly, or install via the `skills` CLI.
 
 ## Install
 
 ```bash
-# Add the marketplace
-/plugin marketplace add dvf/op-django
+# Install the whole collection
+npx skills add dvf/future-django
 
-# Install the plugin
-/plugin install op-django
+# Or install a single skill
+npx skills add dvf/future-django/architecture
 ```
 
-## Test Locally
+## Use Locally
+
+Clone the repo and point your agent at the `skills/` directory, or copy individual skill folders into your project's own skills location.
 
 ```bash
-claude --plugin-dir /path/to/op-django
+git clone https://github.com/dvf/future-django
 ```
 
 ## Example Project

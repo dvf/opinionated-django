@@ -1,13 +1,14 @@
 ---
 name: signals
-description: Add reliable signals (async side-effects via Celery) to a Django feature. Use when a business operation needs to trigger post-commit work like notifications, cache invalidation, analytics, or cross-service coordination. Use proactively whenever the user mentions side-effects, events, or async processing tied to a business action.
-argument-hint: [signal description, e.g. "send welcome email after user registration"]
-allowed-tools: Read Write Edit Bash Grep Glob
+description: Add reliable signals (async side-effects via Celery) to a Django feature. Use when a business operation needs to trigger post-commit work like notifications, cache invalidation, analytics, or cross-service coordination — any time the user mentions side-effects, events, or async processing tied to a business action.
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
-# Add Reliable Signal: $ARGUMENTS
+# Add a Reliable Signal
 
 You are adding a reliable signal to an opinionated Django project. Standard Django signals are synchronous and unreliable — receiver failures propagate to the sender, there's no delivery guarantee if the process crashes after commit, and there's no retry. This project uses the reliable signals pattern with Celery instead.
+
+> The pattern implemented here is adapted from Haki Benita's write-up on reliable Django signals. Credit for the original design goes to him — see [hakibenita.com](https://hakibenita.com) for the full article.
 
 ## How It Works
 
@@ -15,9 +16,9 @@ Signal receiver tasks are enqueued **inside the same database transaction** as t
 
 ## BEFORE WRITING CODE
 
-1. Read `ARCHITECTURE.md` for the full reliable signals reference
-2. Read any existing signals: !`find src -name "signals.py" -not -path "*/__pycache__/*" 2>/dev/null`
-3. Read any existing receivers: !`find src -name "receivers.py" -not -path "*/__pycache__/*" 2>/dev/null`
+1. Read `ARCHITECTURE.md` if present for the full reliable signals reference
+2. Find existing signals with `Grep` for `ReliableSignal` under `src/`
+3. Find existing receivers with `Glob` for `src/**/receivers.py`
 4. Identify which service method should emit the signal and what data needs to travel with it
 
 ---
