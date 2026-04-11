@@ -267,6 +267,33 @@ def test_list_products_empty(client):
 - Prefer asserting on **shape and a prefix** over a full dict comparison — test becomes resilient to added optional fields.
 - If a route is just a passthrough to a service, one happy-path test is enough — the service tests cover the business logic, the repo tests cover persistence, and this test proves the wiring.
 
+#### Testing the exception handler
+
+Services raise plain Python exceptions (`ValueError`, `LookupError`, `PermissionError`); the central exception handler in `src/project/api/__init__.py` maps them to HTTP responses (400, 404, 403) with a `{"detail": "..."}` body. API tests are the layer that proves the round-trip — assert on the status code and the JSON body, not on the raised exception.
+
+```python
+@pytest.mark.django_db
+def test_create_order_rejects_insufficient_stock(client):
+    # Create a product with only 1 in stock.
+    product_resp = client.post(
+        "/products/",
+        data={"name": "Limited", "price": "5.00", "stock": 1},
+        content_type="application/json",
+    )
+    product_id = product_resp.json()["id"]
+
+    response = client.post(
+        "/orders/",
+        data={"items": [{"product_id": product_id, "quantity": 10}]},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert "Insufficient stock" in response.json()["detail"]
+```
+
+The equivalent `test_service.py` test should assert the raw exception (`with pytest.raises(ValueError, match="Insufficient stock"):`) rather than a status code — the service test doesn't go through the API, so it never sees the HTTP mapping. Layering matters: service tests prove the exception is raised, API tests prove the exception handler maps it correctly.
+
 ### Reliable-signal tests
 
 Receivers run via Celery. With `CELERY_TASK_ALWAYS_EAGER`, they execute in-process, but `transaction.on_commit` only fires when the transaction actually commits — which means you need the `transaction=True` flavor of the marker:
@@ -324,6 +351,7 @@ def test_expires_at_is_24h_from_now(make_product_dto):
 - **Forgetting `transaction=True` on reliable-signal tests.** `on_commit` won't fire, the receiver won't run, and the test silently passes without exercising anything.
 - **Testing Django internals.** Don't write a test that boils down to "does `.filter()` work?" — trust the framework and test your code.
 - **Missing the idempotency test.** Every reliable-signal receiver needs a test that proves calling it twice is safe.
+- **Asserting on a status code for a business-rule violation in a `test_service.py` file.** Service tests should use `pytest.raises`; only `test_api.py` round-trips through the exception handler.
 
 ## Verify
 

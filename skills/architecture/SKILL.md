@@ -19,7 +19,9 @@ Gather current project state by reading:
 - `src/project/ids.py` — existing ID prefixes (must be unique)
 - `src/project/services.py` — registered repos/services
 - `src/project/settings.py` — `INSTALLED_APPS`
-- `src/project/api.py` — existing routes
+- `src/project/api/__init__.py` — `NinjaAPI()`, mounted resource routers, exception handlers
+- `src/project/api/<resource>/` — existing per-resource route packages
+- `src/project/types.py` — `AuthedRequest` and other shared request types
 - `ARCHITECTURE.md` if present — full pattern reference
 - Any existing app the feature touches
 
@@ -134,42 +136,79 @@ Both repos and services get registered. Service factories wire up repo dependenc
 
 ### Layer 7: API Routes
 
-ALL routes go in `src/project/api.py` — NOT in app directories.
+Routes live in a per-resource package under `src/project/api/` — NOT in app directories. Each resource is its own subpackage:
+
+```
+src/project/
+└── api/
+    ├── __init__.py          # NinjaAPI(), exception handlers, mounts routers
+    ├── my_entities/
+    │   ├── __init__.py      # re-exports `router` from routes
+    │   ├── routes.py        # handlers
+    │   └── schemas.py       # ninja.Schema input models
+    └── other_resource/
+        ├── __init__.py
+        ├── routes.py
+        └── schemas.py
+```
 
 RULES:
-- Input schemas are `ninja.Schema` classes defined in `api.py`
+- Input schemas are `ninja.Schema` classes defined in `schemas.py` next to the routes
 - Output schemas reuse the DTOs from the app — do not duplicate
+- The resource package's `__init__.py` re-exports the `router` from `routes` (e.g. `from .routes import router`)
+- The top-level `src/project/api/__init__.py` creates the `NinjaAPI()` instance, registers exception handlers, and mounts each resource router with `api.add_router("/my-entities", my_entities_router)`
 - Pattern: `from project.services import get`, then `get(MyEntityService)` to obtain a wired service
-- `Status(code, data)` for non-200 responses
+- Every handler's first arg is typed `request: AuthedRequest` — never untyped. `AuthedRequest` lives in `src/project/types.py` and narrows `request.user` to an authenticated Django `User`
 - ID path params are `str`
+- Handlers do NOT try/except — errors bubble up to the central exception handler (see below)
+
+`src/project/api/my_entities/routes.py`:
 
 ```python
+from typing import List
+
+from ninja import Router, Status
+
+from myapp.dtos.my_entity import MyEntityDTO
+from myapp.services.my_entity import MyEntityService
 from project.services import get
+from project.types import AuthedRequest
 
-my_router = Router()
+from .schemas import CreateMyEntityIn
 
-class CreateMyEntityIn(Schema):
-    name: str
-    # input fields...
+router = Router()
 
-@my_router.get("/", response=List[MyEntityDTO])
-def list_entities(request):
-    service = get(MyEntityService)
-    return service.list_entities()
 
-@my_router.post("/", response={201: MyEntityDTO})
-def create_entity(request, payload: CreateMyEntityIn):
-    service = get(MyEntityService)
-    return Status(201, service.create_entity(name=payload.name))
+@router.get("/", response=List[MyEntityDTO])
+def list_entities(request: AuthedRequest):
+    return get(MyEntityService).list_entities()
 
-@my_router.get("/{entity_id}/", response=MyEntityDTO)
-def get_entity(request, entity_id: str):
-    service = get(MyEntityService)
-    return service.get_entity(entity_id)
 
-# Mount at bottom of api.py:
-api.add_router("/my-entities", my_router)
+@router.post("/", response={201: MyEntityDTO})
+def create_entity(request: AuthedRequest, payload: CreateMyEntityIn):
+    return Status(201, get(MyEntityService).create_entity(name=payload.name))
+
+
+@router.get("/{entity_id}/", response=MyEntityDTO)
+def get_entity(request: AuthedRequest, entity_id: str):
+    return get(MyEntityService).get_entity(entity_id)
 ```
+
+#### Central exception handlers
+
+Services raise plain Python exceptions — `ValueError` for bad input, `LookupError` for missing records, `PermissionError` for forbidden access. They do NOT know about HTTP. The mapping happens once, centrally, in `src/project/api/__init__.py`:
+
+- `ValueError` → `400 {"detail": str(exc)}`
+- `LookupError` → `404 {"detail": str(exc)}`
+- `PermissionError` → `403 {"detail": str(exc)}`
+
+```python
+@api.exception_handler(ValueError)
+def on_value_error(request, exc: ValueError):
+    return api.create_response(request, {"detail": str(exc)}, status=400)
+```
+
+Route handlers MUST NOT wrap service calls in try/except — errors bubble up and the central handler turns them into responses.
 
 ### Layer 8: Admin
 
@@ -360,7 +399,9 @@ Before reporting done, confirm every item:
 - [ ] Repository: returns DTOs only, `model_validate()`, `@transaction.atomic` for multi-writes
 - [ ] Service: repos via `__init__`, zero ORM, business logic only
 - [ ] Repo and service registered in `src/project/services.py`
-- [ ] Routes in `src/project/api.py` using `from project.services import get`
+- [ ] Routes in `src/project/api/<resource>/routes.py`, schemas in `schemas.py`, mounted in `src/project/api/__init__.py` using `from project.services import get`
+- [ ] `request: AuthedRequest` annotation on every handler
+- [ ] Central exception handlers registered in `src/project/api/__init__.py` (`ValueError`→400, `LookupError`→404, `PermissionError`→403)
 - [ ] Admin registered with `list_display`
 - [ ] App in `INSTALLED_APPS` (if new) using dotted `AppConfig` path
 - [ ] Migrations generated and applied

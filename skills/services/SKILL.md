@@ -141,13 +141,16 @@ Notes:
 
 ```python
 from project.services import get
+from project.types import AuthedRequest
 
 
 @products_router.post("/", response={201: ProductDTO})
-def create_product(request, payload: CreateProductIn):
+def create_product(request: AuthedRequest, payload: CreateProductIn):
     service = get(ProductService)
     return Status(201, service.create_product(**payload.dict()))
 ```
+
+Annotating `request` as `AuthedRequest` (defined in `src/project/types.py`) makes the auth contract explicit and narrows `request.user` to a guaranteed-authenticated Django `User`. This is a **typing contract**, not runtime enforcement — auth is still expected to be wired via middleware or ninja's `auth=` parameter.
 
 ### From a Celery task
 

@@ -25,3 +25,25 @@ def test_create_order(client):
     assert len(order_json["items"]) == 1
     assert order_json["items"][0]["product_id"] == product_id
     assert order_json["items"][0]["quantity"] == 2
+
+
+@pytest.mark.django_db
+def test_create_order_rejects_insufficient_stock(client):
+    # create a product with stock=1
+    product_resp = client.post(
+        "/products/",
+        data={"name": "Limited", "price": "5.00", "stock": 1},
+        content_type="application/json",
+    )
+    product_id = product_resp.json()["id"]
+
+    response = client.post(
+        "/orders/",
+        data={"items": [{"product_id": product_id, "quantity": 10}]},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert "detail" in body
+    assert "Insufficient stock" in body["detail"]

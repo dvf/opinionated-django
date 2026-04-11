@@ -28,7 +28,13 @@ src/
     urls.py
     wsgi.py
     asgi.py
-    api.py          # all django-ninja routes live here
+    api/
+      __init__.py   # NinjaAPI() instance, exception handlers, mounts all resource routers
+      <resource>/
+        __init__.py  # re-exports router
+        routes.py    # handler functions
+        schemas.py   # ninja.Schema input types
+    types.py        # AuthedRequest and other shared typing aliases
     ids.py          # prefixed ULID generators
     services.py    # svcs registry + get() helper
     signals.py     # ReliableSignal base + send_reliable machinery
@@ -121,19 +127,103 @@ def get[T](service_type: type[T]) -> T:
     return svcs.Container(registry).get(service_type)
 ```
 
-## Step 4: `src/project/api.py`
+## Step 4a: `src/project/types.py`
+
+Narrows `request.user` to a guaranteed-authenticated Django `User` so handlers don't have to deal with `AnonymousUser` unions.
+
+```python
+from django.contrib.auth.models import User
+from django.http import HttpRequest
+
+
+class AuthedRequest(HttpRequest):
+    """
+    An HttpRequest whose `user` attribute is guaranteed to be an authenticated User.
+
+    Use as the first-argument annotation on any django-ninja handler that requires
+    auth. The narrowing is a contract, not runtime enforcement — pair this with
+    ninja's `auth=` on the router or a middleware that rejects anonymous requests.
+    """
+    user: User  # type: ignore[assignment]
+```
+
+## Step 4b: `src/project/api/` package
+
+The API lives in a package, not a single file. `src/project/api/__init__.py` owns the `NinjaAPI()` instance and central exception handlers, and mounts one router per resource subpackage. Each resource subpackage (`src/project/api/<resource>/`) contains `routes.py` (handler functions), `schemas.py` (ninja `Schema` input types), and an `__init__.py` that re-exports the router.
+
+`src/project/api/__init__.py`:
 
 ```python
 from ninja import NinjaAPI
 
+# Import resource routers and mount them below.
+# from project.api.products import router as products_router
+
 api = NinjaAPI()
 
-# Routers are defined here and mounted below.
-# Example:
-# from ninja import Router
-# products_router = Router()
 # api.add_router("/products", products_router)
+
+
+@api.exception_handler(ValueError)
+def on_value_error(request, exc: ValueError):
+    return api.create_response(request, {"detail": str(exc)}, status=400)
+
+
+@api.exception_handler(LookupError)
+def on_lookup_error(request, exc: LookupError):
+    return api.create_response(request, {"detail": str(exc)}, status=404)
+
+
+@api.exception_handler(PermissionError)
+def on_permission_error(request, exc: PermissionError):
+    return api.create_response(request, {"detail": str(exc)}, status=403)
 ```
+
+Example resource subpackage — `src/project/api/products/routes.py`:
+
+```python
+from typing import List
+
+from ninja import Router
+
+from products.dtos.product import ProductDTO
+from products.services.product import ProductService
+from project.services import get
+from project.types import AuthedRequest
+
+from .schemas import CreateProductIn
+
+router = Router()
+
+
+@router.get("/", response=List[ProductDTO])
+def list_products(request: AuthedRequest):
+    return get(ProductService).list_products()
+```
+
+`src/project/api/products/schemas.py`:
+
+```python
+from decimal import Decimal
+
+from ninja import Schema
+
+
+class CreateProductIn(Schema):
+    name: str
+    price: Decimal
+    stock: int
+```
+
+`src/project/api/products/__init__.py`:
+
+```python
+from .routes import router
+
+__all__ = ["router"]
+```
+
+To add a new resource router: (a) create `src/project/api/<resource>/` with `routes.py`, `schemas.py`, and `__init__.py`, then (b) import and mount the router in `src/project/api/__init__.py` via `api.add_router("/<resource>", <resource>_router)`.
 
 Wire `api.urls` into `src/project/urls.py`:
 
@@ -261,7 +351,9 @@ All five must pass. Fix any issue rather than silencing it.
 - [ ] Dependencies added via `uv add`
 - [ ] `src/project/ids.py` with `_make_generator` helper
 - [ ] `src/project/services.py` with `registry` and `get()`
-- [ ] `src/project/api.py` with `NinjaAPI` instance
+- [ ] `src/project/types.py` with `AuthedRequest`
+- [ ] `src/project/api/__init__.py` with `NinjaAPI` instance (per-resource routers live in `src/project/api/<resource>/` subpackages)
+- [ ] Central exception handlers registered (`ValueError` → 400, `LookupError` → 404, `PermissionError` → 403)
 - [ ] `src/project/signals.py` with `ReliableSignal` base
 - [ ] `src/project/celery.py` + `__init__.py` export
 - [ ] `urls.py` mounts `api.urls`
