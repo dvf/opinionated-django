@@ -4,7 +4,7 @@
 
 I love Django, but some parts of it are genuinely hard to type: querysets, model instances, related managers, `F()`/`Q()` expressions, etc. In my experience, the cleanest way to handle this is to keep all the ORM work behind a repository layer that returns Pydantic DTOs. Your business logic lives in services that never import a model. Your views become one-liners, and each layer becomes very easy to mock and test.
 
-After discussions with my friends [Haki Benita](https://github.com/hakib) and [Pete Nilson](https://github.com/petenilson), this is what I believe to be a reasonable set of patterns for flexible, testable Django projects. It's opinionated, but these patterns have been road-tested on large scale projects in the wild.
+After discussions with my friends [Haki Benita](https://github.com/hakib) and [Pete Nilson](https://github.com/petenilson), this is what I believe to be a reasonable set of patterns for flexible, testable Django projects. They're opinionated, but hold up well on large scale projects in the wild.
 
 ## A Layered Approach Using Encapsulation
 

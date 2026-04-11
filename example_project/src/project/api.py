@@ -3,11 +3,11 @@ from typing import List
 
 from ninja import NinjaAPI, Router, Schema, Status
 
-from example_project.src.orders.dtos.order import OrderDTO
-from example_project.src.orders.services.order import OrderService
-from example_project.src.products.dtos.product import ProductDTO
-from example_project.src.products.services.product import ProductService
-from example_project.src.project.services import get
+from ..orders.dtos.order import OrderDTO
+from ..orders.services.order import OrderService
+from ..products.dtos.product import ProductDTO
+from ..products.services.product import ProductService
+from ..project.services import get
 
 api = NinjaAPI()
 
