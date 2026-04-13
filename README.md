@@ -51,6 +51,8 @@ npx skills add dvf/opinionated-django/scaffold|architecture|models|services|pref
 
 Your agent will pick them up automatically on its next run. You can also clone the repo and point your agent at `skills/` directly.
 
+<img width="1203" height="832" alt="image" src="https://github.com/user-attachments/assets/6d760c4c-6b7f-4ea3-8242-100c40ce6647" />
+
 ## The Skills
 
 Each skill is a directory under `skills/` with its own `SKILL.md`. They're designed to stand alone, but they compose nicely — `scaffold` lays the foundation, `architecture` builds features on top, and the rest fill in the details.
