@@ -46,7 +46,7 @@ Skills install with a single command:
 npx skills add dvf/opinionated-django
 
 # Or just one
-npx skills add dvf/opinionated-django/scaffold|architecture|services|prefixed-ulids|signals|settings|lint
+npx skills add dvf/opinionated-django/scaffold|architecture|models|services|prefixed-ulids|signals|settings|lint
 ```
 
 Your agent will pick them up automatically on its next run. You can also clone the repo and point your agent at `skills/` directly.
@@ -63,6 +63,9 @@ Stripe-style prefixed ULID primary keys for every model (`prd_01jq3v...`, `ord_0
 
 ### 🧩 `services`
 Plain service classes with constructor-injected repositories, wired through an [svcs](https://svcs.hynek.me) registry. Business logic lives here, zero ORM imports allowed. Resolve anywhere — views, Celery tasks, management commands, tests — with a single generic `get[T]()` call.
+
+### 📐 `models`
+Structures Django models with `Meta` first, explicit `verbose_name`/`verbose_name_plural`, and indexes declared in `Meta.indexes` — optimized for the queries the repository actually runs. Also registers every model in the admin with a clean, fast-loading config (`list_per_page = 25`, `raw_id_fields` for large FKs, `extra = 0` on inlines).
 
 ### 🏛️ `architecture`
 The full feature blueprint. Given a description, the agent scaffolds models, Pydantic DTOs, repositories, services, django-ninja routes, admin registration, and three layers of tests (repo against a real DB, service against mocked repos, API through HTTP). Every convention is spelled out; every layer is non-negotiable.
@@ -81,7 +84,7 @@ Runs `ruff check`, `ruff format --check`, and `pyrefly check`, then fixes whatev
 
 ## The Patterns at a Glance
 
-- **Models** — Prefixed ULID primary keys. No business logic, no custom `save()`, no properties that compute. Just fields and `__str__`.
+- **Models** — `Meta` first (with `verbose_name`, `verbose_name_plural`, and `indexes`), prefixed ULID primary keys, indexes optimized for actual query patterns. No business logic, no custom `save()`, no properties that compute. Just fields and `__str__`.
 - **DTOs** — Pydantic v2 with `from_attributes=True`. All IDs are `str`. ORM objects never leave the repository.
 - **Repositories** — The only layer that touches the ORM. Returns DTOs. `@transaction.atomic` for multi-writes. One repo per aggregate root.
 - **Services** — Receives dependencies via `__init__`. Pure business logic. Zero ORM imports. Testable without a database.

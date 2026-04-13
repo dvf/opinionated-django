@@ -47,9 +47,12 @@ Prefixes must be unique across the project and short enough to be readable in lo
 
 File: `src/<app>/models/<entity>.py`
 
-RULES:
+Follow the **models** skill for full conventions. The key rules:
+
+- `class Meta` is **always first** inside the model body — with `verbose_name`, `verbose_name_plural`, and `indexes`
 - `CharField(max_length=64)` primary key with prefixed ULID default — NEVER UUIDs, NEVER auto-increment
 - `__prefix__: ClassVar[str]` on every model
+- All indexes in `Meta.indexes` — never `db_index=True` on fields. Optimize for queries the repository actually runs.
 - ZERO business logic — no custom managers, no `save()` overrides, no signals, no properties that compute
 - `__str__` is the only method allowed
 
@@ -59,6 +62,13 @@ from django.db import models
 from project.ids import generate_xxx_id
 
 class MyEntity(models.Model):
+    class Meta:
+        verbose_name = "my entity"
+        verbose_name_plural = "my entities"
+        indexes = [
+            models.Index(fields=["created_at"], name="idx_%(class)s_created"),
+        ]
+
     __prefix__: ClassVar[str] = "xxx"
     id = models.CharField(max_length=64, primary_key=True, default=generate_xxx_id, editable=False)
     # fields...
@@ -214,7 +224,17 @@ Route handlers MUST NOT wrap service calls in try/except — errors bubble up an
 
 File: `src/<app>/admin.py`
 
-Register every model. Use `list_display` with the `id` field first. Use `TabularInline` for child models on the parent's admin.
+Follow the **models** skill for full admin conventions. The key rules:
+
+- Register every model with `@admin.register`
+- `list_display` — `id` first, then 3-5 most useful columns
+- `list_per_page = 25` — keeps the admin fast on large tables
+- `search_fields` — always include `id`, plus name/title fields
+- `readonly_fields` — always include `id` (ULID PKs are never edited)
+- `ordering` — explicit, usually `-created_at` or the primary time field
+- `list_select_related` — specify FKs shown in `list_display` to avoid N+1s
+- `raw_id_fields` or `autocomplete_fields` for FKs to large tables
+- `TabularInline` for child models — `extra = 0`, `show_change_link = True`
 
 ---
 
@@ -394,7 +414,7 @@ If anything fails, fix it and re-run.
 Before reporting done, confirm every item:
 
 - [ ] ID generator in `src/project/ids.py` with unique 3-4 char prefix
-- [ ] Model: `__prefix__` ClassVar, `CharField` PK with ULID default, zero logic
+- [ ] Model: `Meta` first (verbose names + indexes), `__prefix__` ClassVar, `CharField` PK with ULID default, zero logic
 - [ ] DTO: `str` IDs, `from_attributes=True`, RelatedManager coercion if needed
 - [ ] Repository: returns DTOs only, `model_validate()`, `@transaction.atomic` for multi-writes
 - [ ] Service: repos via `__init__`, zero ORM, business logic only
@@ -402,7 +422,7 @@ Before reporting done, confirm every item:
 - [ ] Routes in `src/project/api/<resource>/routes.py`, schemas in `schemas.py`, mounted in `src/project/api/__init__.py` using `from project.services import get`
 - [ ] `request: AuthedRequest` annotation on every handler
 - [ ] Central exception handlers registered in `src/project/api/__init__.py` (`ValueError`→400, `LookupError`→404, `PermissionError`→403)
-- [ ] Admin registered with `list_display`
+- [ ] Admin registered per **models** skill conventions (`list_display`, `list_per_page = 25`, `search_fields`, `readonly_fields`, `ordering`, `raw_id_fields`/`autocomplete_fields` for large FKs, inlines with `extra = 0`)
 - [ ] App in `INSTALLED_APPS` (if new) using dotted `AppConfig` path
 - [ ] Migrations generated and applied
 - [ ] `test_repo.py`: real DB, asserts ID prefix
