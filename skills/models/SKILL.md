@@ -37,23 +37,36 @@ class MyEntity(models.Model):
         verbose_name = "my entity"
         verbose_name_plural = "my entities"
         indexes = [
-            models.Index(fields=["created_at"], name="idx_%(class)s_created"),
+            models.Index(fields=["-created_at"], name="idx_%(class)s_recent"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["slug"], name="uq_%(class)s_slug"),
         ]
 
     # 2. ClassVar prefix
     __prefix__: ClassVar[str] = "xxx"
 
-    # 3. Primary key
+    # 3. Identifiers — primary key, slugs, external refs
     id = models.CharField(
         max_length=64, primary_key=True, default=generate_xxx_id, editable=False
     )
+    slug = models.SlugField(max_length=255)
 
-    # 4. Foreign keys and relations
-    # 5. Required fields
-    # 6. Optional fields
-    # 7. Timestamp fields (created_at, updated_at — always last among fields)
+    # 4. Time fields — created, updated, any dates/datetimes
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    # 8. __str__ — the only method allowed
+    # 5. Workflow / status / state (if applicable)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+
+    # 6. Everything else — domain fields
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+
+    # 7. Relations — ForeignKey, OneToOne, ManyToMany (always last among fields)
+    category = models.ForeignKey("categories.Category", on_delete=models.CASCADE)
+
+    # 8. __str__ — only if useful, and the only method allowed
     def __str__(self) -> str:
         return self.name
 ```
@@ -65,6 +78,13 @@ class MyEntity(models.Model):
 ### Meta First
 
 `class Meta` is **always** the first thing inside the model body — before `__prefix__`, before the primary key, before any field. This is non-negotiable. It puts the most important structural information (naming, indexes, ordering, constraints) at the top where it's immediately visible.
+
+The ordering inside `Meta` itself:
+
+1. `verbose_name` and `verbose_name_plural`
+2. `indexes`
+3. `constraints` (unique constraints, check constraints)
+4. Anything else (`ordering`, `abstract`, etc.)
 
 ### Always Declare `verbose_name` and `verbose_name_plural`
 
@@ -79,6 +99,74 @@ class Meta:
 - Use lowercase, human-readable English
 - Never rely on Django's automatic pluralization — it gets edge cases wrong (`"categorys"`, `"order items"` → `"order itemss"`)
 - The `verbose_name` should read naturally in admin headers and log messages
+
+### Field Ordering
+
+Fields are grouped by role, in this order:
+
+1. **Identifiers** — primary key, slugs, external reference codes, SKUs
+2. **Time fields** — `created_at`, `updated_at`, `published_at`, any date or datetime
+3. **Workflow / status / state** — `status`, `stage`, `is_active`, `is_published` (skip if the model has no lifecycle)
+4. **Domain fields** — everything else: `name`, `description`, `price`, `quantity`, etc.
+5. **Relations** — `ForeignKey`, `OneToOneField`, `ManyToManyField` — always last among fields
+
+This ordering makes scanning a model top-to-bottom predictable: "what is it, when was it, where is it in its lifecycle, what does it contain, what does it relate to."
+
+### Uniqueness and Constraints in Meta
+
+All uniqueness and constraints are declared in `Meta.constraints` — never use `unique=True` on individual fields. This keeps all structural rules in one place, right at the top of the model.
+
+```python
+class Meta:
+    verbose_name = "product"
+    verbose_name_plural = "products"
+    indexes = [
+        models.Index(fields=["-created_at"], name="idx_%(class)s_recent"),
+    ]
+    constraints = [
+        models.UniqueConstraint(fields=["sku"], name="uq_%(class)s_sku"),
+        models.UniqueConstraint(fields=["store", "slug"], name="uq_%(class)s_store_slug"),
+        models.CheckConstraint(check=models.Q(price__gte=0), name="ck_%(class)s_price_pos"),
+    ]
+```
+
+Constraint naming convention:
+- **Unique:** `uq_%(class)s_<short_description>`
+- **Check:** `ck_%(class)s_<short_description>`
+
+`UniqueConstraint` is strictly more powerful than `unique=True` — it supports multi-column uniqueness, conditional uniqueness (`condition=`), and naming. Use it exclusively.
+
+### Field `verbose_name` and `help_text`
+
+Any field whose name is more than one word (joined by underscores) should have an explicit `verbose_name` so it reads cleanly in the admin:
+
+```python
+price_at_purchase = models.DecimalField(
+    verbose_name="price at purchase",
+    max_digits=10,
+    decimal_places=2,
+)
+```
+
+Any field whose purpose is not immediately obvious from its name needs `help_text`. This shows up in the admin form below the field and serves as inline documentation:
+
+```python
+idempotency_key = models.CharField(
+    max_length=255,
+    help_text="Client-generated key to prevent duplicate order submissions.",
+)
+retention_days = models.IntegerField(
+    verbose_name="retention days",
+    default=90,
+    help_text="Number of days to retain this record before archival.",
+)
+```
+
+Rules:
+- Single-word fields (`name`, `price`, `status`) don't need a `verbose_name` — Django infers it fine
+- Multi-word fields (`price_at_purchase`, `is_published`, `created_by`) always get an explicit `verbose_name`
+- Obscure or domain-specific fields always get `help_text` — if a new developer would need to ask "what is this?", add it
+- Keep `help_text` to one sentence, written for someone reading the admin form
 
 ### Specify Indexes in Meta
 
@@ -105,7 +193,7 @@ Don't index speculatively. Read the repository that queries this model and index
 - **Prefix for descending sort** → use `-` prefix: `fields=["-created_at"]` for queries that `ORDER BY created_at DESC`
 - **Covering queries** → if a query only reads a small set of columns, consider `include` (Postgres): `models.Index(fields=["status"], include=["total"], name="idx_%(class)s_status_cov")`
 - **Partial indexes** → if a query always filters on a condition, use `condition`: `models.Index(fields=["created_at"], condition=models.Q(status="pending"), name="idx_%(class)s_pending")`
-- **Don't duplicate** — Django auto-creates an index for every `ForeignKey` and `unique=True` field. Don't add a redundant single-column index for those.
+- **Don't duplicate** — Django auto-creates an index for every `ForeignKey` and `UniqueConstraint`. Don't add a redundant single-column index for those.
 - **Don't over-index** — every index slows writes. Three or four well-chosen indexes beat eight speculative ones.
 
 ### No Business Logic
@@ -116,7 +204,7 @@ Models contain ZERO business logic:
 - No `save()` overrides
 - No signals
 - No properties that compute
-- `__str__` is the only method allowed
+- `__str__` is the only method allowed — and only if it adds value (skip it if the default `ModelName object (pk)` is fine)
 
 ---
 
@@ -183,14 +271,34 @@ class Order(models.Model):
         verbose_name_plural = "orders"
         indexes = [
             models.Index(fields=["-date"], name="idx_%(class)s_recent"),
+            models.Index(fields=["status", "-date"], name="idx_%(class)s_status_recent"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["idempotency_key"],
+                name="uq_%(class)s_idempotency",
+            ),
         ]
 
     __prefix__: ClassVar[str] = "ord"
 
+    # Identifiers
     id = models.CharField(
         max_length=64, primary_key=True, default=generate_ord_id, editable=False
     )
+    idempotency_key = models.CharField(
+        verbose_name="idempotency key",
+        max_length=255,
+        help_text="Client-generated key to prevent duplicate order submissions.",
+    )
+
+    # Time
     date = models.DateTimeField(auto_now_add=True)
+
+    # Status
+    status = models.CharField(max_length=20, default="pending")
+
+    # Domain
     total = models.DecimalField(max_digits=12, decimal_places=2)
 
     def __str__(self) -> str:
@@ -207,13 +315,23 @@ class OrderItem(models.Model):
 
     __prefix__: ClassVar[str] = "itm"
 
+    # Identifiers
     id = models.CharField(
         max_length=64, primary_key=True, default=generate_itm_id, editable=False
     )
+
+    # Domain
+    quantity = models.PositiveIntegerField()
+    price_at_purchase = models.DecimalField(
+        verbose_name="price at purchase",
+        max_digits=10,
+        decimal_places=2,
+        help_text="Snapshot of the product price at the time the order was placed.",
+    )
+
+    # Relations
     order = models.ForeignKey(Order, related_name="items", on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField()
-    price_at_purchase = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self) -> str:
         return f"{self.quantity} x {self.product.name} (Order {self.order_id})"  # type: ignore[attr-defined]
@@ -237,9 +355,9 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("id", "date", "total")
+    list_display = ("id", "status", "date", "total")
     list_per_page = 25
-    search_fields = ("id",)
+    search_fields = ("id", "idempotency_key")
     readonly_fields = ("id",)
     ordering = ("-date",)
     date_hierarchy = "date"
@@ -266,11 +384,16 @@ All must pass. Fix any issue rather than silencing it.
 
 - [ ] `class Meta` is the first thing inside the model body
 - [ ] `verbose_name` and `verbose_name_plural` are set — never relying on Django's auto-pluralization
-- [ ] All indexes are in `Meta.indexes` — no `db_index=True` on fields
+- [ ] Field order: identifiers → time → status/state → domain → relations
+- [ ] All indexes in `Meta.indexes` — no `db_index=True` on fields
+- [ ] All uniqueness in `Meta.constraints` via `UniqueConstraint` — no `unique=True` on fields
+- [ ] Check constraints in `Meta.constraints` where applicable
 - [ ] Indexes match actual query patterns from the repository layer
 - [ ] No over-indexing — only index what is queried
+- [ ] Multi-word fields have explicit `verbose_name`
+- [ ] Obscure or domain-specific fields have `help_text`
 - [ ] No business logic — no custom managers, `save()`, signals, or computed properties
-- [ ] `__str__` is the only method
+- [ ] `__str__` only if useful, and the only method allowed
 - [ ] Model registered in admin with `list_display`, `list_per_page = 25`, `search_fields`, `readonly_fields`, `ordering`
 - [ ] FKs to large tables use `raw_id_fields` or `autocomplete_fields`
 - [ ] Inlines use `extra = 0` and `show_change_link = True`
