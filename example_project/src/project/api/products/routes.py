@@ -20,7 +20,9 @@ def list_products(request: AuthedRequest):
 @router.post("/", response={201: ProductDTO})
 def create_product(request: AuthedRequest, payload: CreateProductIn):
     dto = get(ProductService).create_product(
-        name=payload.name, price=payload.price, stock=payload.stock,
+        name=payload.name,
+        price=payload.price,
+        stock=payload.stock,
     )
     return Status(201, dto)
 

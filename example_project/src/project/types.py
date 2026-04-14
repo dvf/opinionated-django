@@ -10,4 +10,5 @@ class AuthedRequest(HttpRequest):
     auth. The narrowing is a contract, not runtime enforcement — pair this with
     ninja's `auth=` on the router or a middleware that rejects anonymous requests.
     """
+
     user: User  # type: ignore[assignment]
