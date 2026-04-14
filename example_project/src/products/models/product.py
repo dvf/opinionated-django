@@ -6,6 +6,13 @@ from project.ids import generate_prd_id
 
 
 class Product(models.Model):
+    class Meta:
+        verbose_name = "product"
+        verbose_name_plural = "products"
+        indexes = [
+            models.Index(fields=["name"], name="idx_%(class)s_name"),
+        ]
+
     __prefix__: ClassVar[str] = "prd"
 
     id = models.CharField(
