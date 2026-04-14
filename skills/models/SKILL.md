@@ -233,6 +233,10 @@ class OrderAdmin(admin.ModelAdmin):
     search_fields = ("id",)
     readonly_fields = ("id",)
     ordering = ("-date",)
+    fieldsets = (
+        (None, {"fields": ("id", "date")}),
+        ("Details", {"fields": ("total",)}),
+    )
     inlines = [OrderItemInline]
 ```
 
@@ -243,6 +247,15 @@ class OrderAdmin(admin.ModelAdmin):
 - **`search_fields`** — always include `id`. Add name/title fields if they exist. Never search on unindexed columns.
 - **`readonly_fields`** — always include `id` (ULID PKs should never be edited). Add computed or auto-set fields.
 - **`ordering`** — explicit ordering so the admin doesn't rely on the default PK sort. Use `-created_at` or the most natural time field.
+- **`fieldsets`** — structure the change view for readability. Always place identifiers (`id`, timestamps) in the first fieldset at the top so they're immediately visible. Group remaining fields logically:
+  ```python
+  fieldsets = (
+      (None, {"fields": ("id", "created_at", "updated_at")}),
+      ("Details", {"fields": ("name", "description", "status")}),
+      ("Relations", {"fields": ("category",)}),
+  )
+  ```
+  The first fieldset (with `None` title) keeps IDs and timestamps prominent with no collapsible header. Use named sections for the rest.
 - **`list_select_related`** — specify FK fields shown in `list_display` to avoid N+1 queries: `list_select_related = ("customer",)`
 - **`raw_id_fields`** — use for any FK to a large table. The default dropdown loads every row: `raw_id_fields = ("product",)`
 - **`extra = 0`** on inlines — never show empty inline forms by default.
@@ -358,9 +371,13 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = ("id", "status", "date", "total")
     list_per_page = 25
     search_fields = ("id", "idempotency_key")
-    readonly_fields = ("id",)
+    readonly_fields = ("id", "date")
     ordering = ("-date",)
     date_hierarchy = "date"
+    fieldsets = (
+        (None, {"fields": ("id", "date")}),
+        ("Details", {"fields": ("status", "total", "idempotency_key")}),
+    )
     inlines = [OrderItemInline]
 ```
 
@@ -394,7 +411,8 @@ All must pass. Fix any issue rather than silencing it.
 - [ ] Obscure or domain-specific fields have `help_text`
 - [ ] No business logic — no custom managers, `save()`, signals, or computed properties
 - [ ] `__str__` only if useful, and the only method allowed
-- [ ] Model registered in admin with `list_display`, `list_per_page = 25`, `search_fields`, `readonly_fields`, `ordering`
+- [ ] Model registered in admin with `list_display`, `list_per_page = 25`, `search_fields`, `readonly_fields`, `ordering`, `fieldsets`
+- [ ] `fieldsets` places `id` and timestamps in the first (untitled) fieldset at the top of the change view
 - [ ] FKs to large tables use `raw_id_fields` or `autocomplete_fields`
 - [ ] Inlines use `extra = 0` and `show_change_link = True`
 - [ ] Migrations generated and applied
