@@ -1,12 +1,12 @@
 ---
-name: scaffold
+name: dj-scaffold
 description: Set up a Django project into the op-django layout so the architecture, signals, and settings skills have a foundation to build on. Use when starting a new project from scratch, or when converting an existing Django project to follow this opinionated structure. Creates the src/project/ shell (ids, services registry, api, reliable signals), installs dependencies with uv, and establishes the per-app directory conventions.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Scaffold an op-django Project
 
-You are preparing a Django project to use the op-django patterns. After this skill runs, the `architecture` and `signals` skills can add features on top without any further setup.
+You are preparing a Django project to use the op-django patterns. After this skill runs, the `dj-architecture` and `dj-signals` skills can add features on top without any further setup.
 
 ## BEFORE WRITING CODE
 
@@ -303,7 +303,7 @@ __all__ = ("celery_app",)
 
 ## Step 7: Settings
 
-Hand off to the **settings** skill to lay out `settings.py` with banner sections. At minimum it must include:
+Hand off to the **dj-settings** skill to lay out `settings.py` with banner sections. At minimum it must include:
 
 - `INSTALLED_APPS` with each project app as `"<app>.apps.<App>Config"`
 - `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` (read via `python-decouple`)
@@ -357,8 +357,8 @@ All five must pass. Fix any issue rather than silencing it.
 - [ ] `src/project/signals.py` with `ReliableSignal` base
 - [ ] `src/project/celery.py` + `__init__.py` export
 - [ ] `urls.py` mounts `api.urls`
-- [ ] Settings organized via the `settings` skill
+- [ ] Settings organized via the `dj-settings` skill
 - [ ] `pyproject.toml` has ruff / pyrefly / pytest config
 - [ ] `django check`, ruff, pyrefly, pytest all pass
 
-Once this checklist is complete, the `architecture` and `signals` skills can build features on top without any extra setup.
+Once this checklist is complete, the `dj-architecture` and `dj-signals` skills can build features on top without any extra setup.

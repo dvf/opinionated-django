@@ -1,5 +1,5 @@
 ---
-name: models
+name: dj-models
 description: Structure Django models with proper Meta classes, verbose names, and optimized indexes. Use when creating or reviewing Django models to ensure consistent ordering, correct verbose_name/verbose_name_plural, and database indexes aligned to actual query patterns. Also registers every model in the admin with a clean, fast-loading configuration.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---

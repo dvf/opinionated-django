@@ -1,5 +1,5 @@
 ---
-name: lint
+name: dj-lint
 description: Run linting, formatting, and static type checks on a Django project using ruff and pyrefly, and fix any issues found. Use after making code changes, before committing, or whenever the user asks to lint, format, or type-check the codebase.
 allowed-tools: Bash, Read, Edit
 ---

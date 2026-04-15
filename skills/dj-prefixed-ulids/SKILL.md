@@ -1,5 +1,5 @@
 ---
-name: prefixed-ulids
+name: dj-prefixed-ulids
 description: Use Stripe-style prefixed ULID primary keys (e.g. `prd_01jq3v...`) for every Django model instead of integers or UUIDs. Use when setting up a new model, reviewing a schema that still uses auto-increment or UUID primary keys, or when the user mentions IDs, slugs, public identifiers, or referential debugging. Produces short readable prefixes, time-sortable values, and IDs that are safe to expose in URLs and logs.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---

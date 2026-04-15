@@ -1,5 +1,5 @@
 ---
-name: services
+name: dj-services
 description: Structure Django business logic as plain services that receive their dependencies via constructor injection, and wire them through an svcs registry so they can be resolved anywhere — views, Celery tasks, management commands, tests. Use when adding a new service, refactoring fat views or model methods into a service, wiring a service into the registry, or explaining where business logic should live in this project.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
@@ -97,7 +97,7 @@ Rules:
 - **Dependencies come in through `__init__`.** The service never instantiates its own repositories or services. If a service needs another service, pass it in.
 - **Zero ORM.** No `.objects`, no `F()` / `Q()`, no model imports, no `select_related`. All database access goes through a repository.
 - **Every public method returns a DTO or `list[DTO]`.** Never a model instance, never a queryset.
-- **ID arguments are `str`.** See the `prefixed-ulids` skill.
+- **ID arguments are `str`.** See the `dj-prefixed-ulids` skill.
 - **Business rules live here.** Validation, orchestration across repositories, invariant checks, error raising — all of it.
 - **Services are stateless.** They hold references to their dependencies and nothing else. No caches, no counters, no module-level state.
 - **Raise plain exceptions.** Use `ValueError`, `PermissionError`, domain-specific exceptions — not `Http404` or anything Django-flavored. The view layer turns them into HTTP responses.

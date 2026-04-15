@@ -1,5 +1,5 @@
 ---
-name: signals
+name: dj-signals
 description: Add reliable signals (async side-effects via Celery) to a Django feature. Use when a business operation needs to trigger post-commit work like notifications, cache invalidation, analytics, or cross-service coordination — any time the user mentions side-effects, events, or async processing tied to a business action.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---

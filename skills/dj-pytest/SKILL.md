@@ -1,5 +1,5 @@
 ---
-name: pytest
+name: dj-pytest
 description: Set up and write pytest tests for an op-django project — pytest-django configuration, Celery eager mode for reliable-signal tests, freezegun for time-sensitive logic, shared conftest fixtures for DTOs and svcs overrides, and the three-layer test convention (repository against a real DB, service against mocked repos, API through HTTP). Use when adding tests to a new project, writing tests for a new feature, setting up test infrastructure, or explaining how tests should be organized.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---

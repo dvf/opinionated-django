@@ -1,5 +1,5 @@
 ---
-name: architecture
+name: dj-architecture
 description: Implement a Django feature following the opinionated architecture — prefixed ULID IDs, repository pattern, Pydantic DTOs, svcs service locator, project-scoped django-ninja API, Celery reliable signals, and layered tests. Use when the user asks to add a new entity, endpoint, app, or business logic in a Django project that follows these conventions.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
