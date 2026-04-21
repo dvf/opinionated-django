@@ -265,6 +265,40 @@ class OrderAdmin(admin.ModelAdmin):
 - **`autocomplete_fields`** — prefer over `raw_id_fields` when the related model has `search_fields` configured for a better UX: `autocomplete_fields = ("customer",)`
 - **`date_hierarchy`** — use on the primary date field if the model is time-series-like (orders, events, logs). Only use on indexed date fields.
 
+### Admin Actions
+
+Custom admin actions (the dropdown users select from on the changelist) MUST be **thin adapters** — never the home of business logic. The action receives a queryset, iterates it, delegates each row to a registered service via `get(Service)`, and reports the result via `self.message_user(request, ...)`.
+
+```python
+from django.contrib import admin
+
+from products.services.product import ProductService
+from project.services import get
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    actions = ["fulfill_selected_action"]
+
+    @admin.action(description="Fulfill selected orders")
+    def fulfill_selected_action(self, request, queryset):
+        count = 0
+        for order in queryset:
+            get(ProductService).fulfill_order(order.id)
+            count += 1
+        self.message_user(request, f"Fulfilled {count} orders.")
+```
+
+**Rules:**
+
+1. **Named `<verb>_<noun>_action`** and listed in `actions = [...]`. The `_action` suffix distinguishes them from regular `ModelAdmin` methods at a glance.
+2. **`@admin.action(description="...")`** is mandatory — the description is what users see in the dropdown. No emojis, no ALL-CAPS shouting.
+3. **Delegate to a service via `get(Service).method(id)`.** The action body MUST NOT contain ORM queries beyond iterating the incoming `queryset`, MUST NOT compute business logic, MUST NOT call external APIs directly.
+4. **Pass IDs, not model instances, to the service.** Matches the rest of the architecture — services deal in DTOs and `str` IDs.
+5. **Call `self.message_user()` with a result summary** — count, or a short outcome description. This is what users see after running the action.
+6. **Do NOT build Celery chains/groups in the action.** If the operation needs async orchestration, build the chain inside the service method; the action stays a thin adapter.
+7. **Error handling** — plain exceptions bubble up and Django renders them appropriately. Do not try/except in the action body; the service is where error semantics live.
+
 ---
 
 ## Full Example
