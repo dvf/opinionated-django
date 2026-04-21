@@ -247,15 +247,33 @@ class OrderAdmin(admin.ModelAdmin):
 - **`search_fields`** — always include `id`. Add name/title fields if they exist. Never search on unindexed columns.
 - **`readonly_fields`** — always include `id` (ULID PKs should never be edited). Add computed or auto-set fields.
 - **`ordering`** — explicit ordering so the admin doesn't rely on the default PK sort. Use `-created_at` or the most natural time field.
-- **`fieldsets`** — structure the change view for readability. Always place identifiers (`id`, timestamps) in the first fieldset at the top so they're immediately visible. Group remaining fields logically:
+- **`fieldsets`** — structure the change view semantically in three bands. Always follow this exact pattern:
+
+  1. **Untitled (`None`) fieldset** — primary key and identity fields only (`id`, plus `email` / `slug` / natural key if the model has one). Renders with no collapsible header so identifiers are always visible at the top.
+  2. **Named semantic sections** — group remaining fields by meaning, not DB column order. Reusable section names: `"Personal Info"`, `"Details"`, `"Role & Permissions"`, `"Security"`, `"Relations"`. Use `"Details"` as the catchall when no more specific name fits.
+  3. **`"Important Dates"` (always last)** — every datetime field goes here: `created_at`, `updated_at`, `deleted_at`, `last_login`, `date_joined`, etc. Title is exactly `"Important Dates"` (title case).
+
   ```python
   fieldsets = (
-      (None, {"fields": ("id", "created_at", "updated_at")}),
+      (None, {"fields": ("id", "slug")}),
       ("Details", {"fields": ("name", "description", "status")}),
       ("Relations", {"fields": ("category",)}),
+      ("Important Dates", {"fields": ("created_at", "updated_at")}),
   )
   ```
-  The first fieldset (with `None` title) keeps IDs and timestamps prominent with no collapsible header. Use named sections for the rest.
+
+  Rationale: identity at top (always visible), domain in the middle (named so it's scannable), dates at the bottom (rarely the thing you're editing, and separating them keeps the top fieldset focused on identity).
+
+- **`add_fieldsets`** — for models that support admin creation (`User` primarily), provide a minimal `add_fieldsets` with just the required fields for a new record:
+  ```python
+  add_fieldsets = (
+      (None, {
+          "classes": ("wide",),
+          "fields": ("email", "password1", "password2"),
+      }),
+  )
+  ```
+  Keeps the "Add" form focused — the full `fieldsets` is for editing, not creation.
 - **`list_select_related`** — specify FK fields shown in `list_display` to avoid N+1 queries: `list_select_related = ("customer",)`
 - **`raw_id_fields`** — use for any FK to a large table. The default dropdown loads every row: `raw_id_fields = ("product",)`
 - **`extra = 0`** on inlines — never show empty inline forms by default.
