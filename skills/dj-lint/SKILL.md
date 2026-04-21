@@ -14,6 +14,50 @@ Run the full static-analysis suite on the project and fix any issues found.
 
 Fix every issue reported (re-run until clean) and report a short summary of what changed when done. If a failure is not auto-fixable, explain what needs human judgement rather than silencing it.
 
+## Import Rules
+
+### Absolute imports everywhere except `__init__.py`
+
+All imports MUST be absolute. Relative imports (`from .foo import Foo`) are allowed ONLY in `__init__.py` files that re-export siblings. Elsewhere, use the full dotted path (`from products.models import Product`).
+
+**Why:** absolute imports survive file moves, make dependencies greppable at a glance, and match PEP 8's recommendation. Relative imports in `__init__.py` is the only case where relative is idiomatic — the package is gathering its public surface, and absolute imports there would just be noise.
+
+Enforced by ruff's `flake8-tidy-imports` (TID252):
+
+```toml
+[tool.ruff.lint]
+select = [..., "TID"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["TID252"]
+```
+
+### Inline imports are exceptional
+
+Module-level imports are the default. Imports inside function or method bodies are allowed ONLY for:
+
+1. **`apps.py` `ready()` signal registration** — `from . import receivers` is idiomatic Django
+2. **Breaking true circular imports** — prefer Django string FKs (`"app.Model"`) first; inline import is a last resort
+3. **Test fixtures / conftest** — scope-controlled imports inside fixture functions
+4. **Expensive imports deferred to first call** — rare case (e.g., loading a large ML model, connecting to an optional SaaS SDK). Document the reason in a one-line comment
+
+Inline imports are NOT allowed to hide architectural cycles in business logic, "clean up" module-top imports, or defer ordinary Django/stdlib imports.
+
+Enforced by ruff's `pylint` rule `PLC0415` (import-outside-toplevel) with per-file-ignores for the idiomatic cases:
+
+```toml
+[tool.ruff.lint]
+select = [..., "PLC0415"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/apps.py" = ["PLC0415"]
+"**/tests/**" = ["PLC0415"]
+"**/conftest.py" = ["PLC0415"]
+```
+
 ## Pyrefly + Django gotchas
 
 Pyrefly has built-in Django support (via `django-stubs`), but a few things aren't covered yet. Recognize these before reaching for `# type: ignore`:
