@@ -394,6 +394,53 @@ def test_receiver_is_idempotent():
 
 ---
 
+## Module Size Limits
+
+Every Python module has a soft and hard line budget. These limits force the repo → service → API layers to stay thin and focused — when a file outgrows them, it's almost always because a concern has crept across layers.
+
+| Limit | Value | Action |
+|---|---|---|
+| Soft | **200 lines** | Review for split at next touch. Not a blocker. |
+| Hard | **400 lines** | MUST be split before merging further growth. |
+
+When a module exceeds the hard limit OR covers more than one concern, convert it to a package directory with one file per concern, re-exported via `__init__.py`:
+
+```
+# Before
+<app>/tasks.py         # 500+ lines, many unrelated tasks
+
+# After
+<app>/tasks/
+  __init__.py          # re-exports public tasks
+  billing.py           # billing-related @shared_task definitions
+  notifications.py     # notification tasks
+  ingestion.py         # ingestion tasks
+```
+
+External imports don't change: `from myapp.tasks import charge_customer` works the same before and after.
+
+### Exemptions
+
+Four categories are exempt from the line limit:
+
+1. **`**/migrations/*.py`** — Django auto-generates these; never hand-edit.
+2. **Fixture data files** — pure test data (large `FIXTURE = [...]` blocks) in `tests/fixtures/data/` or named `*_data.py`. Data is not code.
+3. **Generated code** — protobuf, GraphQL schemas, OpenAPI clients, etc. Document the generator in a comment at the top.
+4. **Third-party / vendored code** — shouldn't modify anyway.
+
+### NOT exempt
+
+Some common "surely this is special" cases that are NOT exempt:
+
+- **Test files.** A 500-line `test_foo.py` is a bad smell — split by concern (`test_create.py`, `test_update.py`, `test_permissions.py`).
+- **`conftest.py`.** If it grows past 400 lines, move fixtures into `tests/fixtures/*.py` modules and have `conftest.py` re-export them.
+- **Re-export `__init__.py`.** If it grows past 200 lines, the package has too much public surface — refactor the package, don't exempt the file.
+- **`tasks.py` / `services.py` / `forms.py`.** Split to a directory (rule above). Do not exempt.
+
+`models/`, `admin/`, and API router directories are already mandatorily-directory from day one under separate skills — those don't hit the size limit because they split per-entity from the start.
+
+---
+
 ## VERIFY
 
 Run all four checks. ALL must pass before you report done.
