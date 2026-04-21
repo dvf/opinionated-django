@@ -8,6 +8,46 @@ allowed-tools: Read, Edit
 
 When modifying `src/project/settings.py`, enforce this structure.
 
+## Single File, Not Split
+
+Settings MUST live in a single `src/project/settings.py`. Do NOT split into `base.py` / `dev.py` / `prod.py` / `test.py`. Environment-specific values are read from environment variables via `python-decouple`; the code branches inline on a single environment variable where needed.
+
+The split-settings pattern scatters the same logical concern across multiple files, forces a choice of `DJANGO_SETTINGS_MODULE` per environment, and makes diffs against "what does prod actually use?" hard to read. A single file with explicit `if ENV == "production":` branches is noisier but honest — everything is visible in one place.
+
+```python
+from decouple import config
+
+ENV = config("ENV", default="local")  # local | staging | production
+
+DEBUG = ENV == "local"
+
+if ENV == "production":
+    ALLOWED_HOSTS = ["app.example.com"]
+    SECURE_SSL_REDIRECT = True
+else:
+    ALLOWED_HOSTS = ["*"]
+```
+
+The exact name of the environment variable is a project choice (`ENV`, `APP_ENV`, or a platform-specific variable like `RAILWAY_ENVIRONMENT_NAME`). The *pattern* — one variable, read once at the top of `settings.py`, branched inline — is fixed.
+
+## Database via `dj-database-url`
+
+`DATABASES["default"]` MUST be parsed from a single `DATABASE_URL` environment variable via `dj-database-url`:
+
+```python
+import dj_database_url
+from decouple import config
+
+DATABASES = {
+    "default": dj_database_url.parse(
+        config("DATABASE_URL", default="postgres://localhost/dev"),
+        conn_max_age=600,
+    ),
+}
+```
+
+Do NOT split the database connection into separate `NAME`/`USER`/`PASSWORD`/`HOST`/`PORT` environment variables. A single URL is simpler, matches every hosting platform's convention (Railway, Heroku, Fly, Render, Neon, Supabase), and is what Django tooling expects.
+
 ## Section Format
 
 Every logical group of settings gets a banner header:
