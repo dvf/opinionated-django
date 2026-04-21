@@ -265,6 +265,63 @@ class OrderAdmin(admin.ModelAdmin):
 - **`autocomplete_fields`** — prefer over `raw_id_fields` when the related model has `search_fields` configured for a better UX: `autocomplete_fields = ("customer",)`
 - **`date_hierarchy`** — use on the primary date field if the model is time-series-like (orders, events, logs). Only use on indexed date fields.
 
+### Pretty-print JSONField with `PrettyJSONMixin`
+
+Django's default `AdminTextareaWidget` renders `JSONField` as a flat, unindented blob. For any admin registering a model with a `JSONField`, opt into the project's `PrettyJSONMixin` to get indented, sorted-key output in the change form.
+
+Provide the widget and mixin once in `src/project/admin_utils.py`:
+
+```python
+import json
+
+from django.contrib.admin import widgets
+from django.db import models
+
+
+class PrettyJSONWidget(widgets.AdminTextareaWidget):
+    """Pretty-print JSONField in admin with indentation and sorted keys."""
+
+    def format_value(self, value):
+        if value is None:
+            return ""
+        try:
+            parsed = json.loads(value) if isinstance(value, str) else value
+            return json.dumps(parsed, indent=2, sort_keys=True)
+        except (json.JSONDecodeError, TypeError):
+            return str(value)
+
+
+class PrettyJSONMixin:
+    """
+    Mix into any ModelAdmin that registers a model with JSONField(s).
+
+    Usage:
+        class OrderAdmin(PrettyJSONMixin, admin.ModelAdmin):
+            ...
+    """
+
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        if isinstance(db_field, models.JSONField):
+            kwargs["widget"] = PrettyJSONWidget()
+        return super().formfield_for_dbfield(db_field, **kwargs)
+```
+
+Then apply the mixin on any affected ModelAdmin:
+
+```python
+from project.admin_utils import PrettyJSONMixin
+
+
+@admin.register(Order)
+class OrderAdmin(PrettyJSONMixin, admin.ModelAdmin):
+    # ...
+```
+
+**Rules:**
+- Mixin is **opt-in** — only add it where the model actually has a `JSONField`. Don't apply it reflexively on every admin.
+- Mixin goes **before** `admin.ModelAdmin` in the MRO so its `formfield_for_dbfield` is called first.
+- Scope is `JSONField` only. Other structured fields (`ArrayField`, `HStoreField`) are not handled — extend the mixin if needed, but don't bloat it speculatively.
+
 ---
 
 ## Full Example
