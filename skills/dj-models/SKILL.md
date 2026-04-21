@@ -15,7 +15,58 @@ Read the model file being created or modified, plus:
 - `src/project/ids.py` — existing ID prefixes
 - Any existing models in the same app — for cross-model index considerations
 - The repository that queries this model — to understand real query patterns
-- `src/<app>/admin.py` — existing admin registrations
+- `src/<app>/admin/` — existing admin registrations
+
+---
+
+## File Layout: `models/` and `admin/` Are Directories
+
+Every app's `models` and `admin` MUST be directories, never a flat `models.py` or `admin.py`.
+
+```
+<app>/
+  models/
+    __init__.py      # re-exports every model + __all__
+    order.py         # one model per file
+    product.py
+    customer.py
+  admin/
+    __init__.py      # imports every admin module to trigger @admin.register
+    order.py         # same filename as the model it registers
+    product.py
+    customer.py
+```
+
+**Rules:**
+
+1. **One model per file.** Filenames match the model in snake_case (`order.py` → `Order`, `order_item.py` → `OrderItem`).
+2. **`admin/` filenames mirror `models/`.** `models/order.py` registers via `admin/order.py`. Navigation is trivial.
+3. **No `_admin` suffix on filenames.** `admin/order.py` — not `admin/order_admin.py`.
+4. **`models/__init__.py` re-exports every model** with `__all__`, using relative imports:
+   ```python
+   from .order import Order, OrderItem
+   from .product import Product
+   from .customer import Customer
+
+   __all__ = ["Customer", "Order", "OrderItem", "Product"]
+   ```
+5. **`admin/__init__.py` imports every admin module.** Registration happens via `@admin.register` in each file, but Django only discovers it if the module is imported:
+   ```python
+   from . import customer  # noqa: F401
+   from . import order     # noqa: F401
+   from . import product   # noqa: F401
+   ```
+6. **External imports always go through the package.** `from myapp.models import Order`, never `from myapp.models.order import Order`.
+7. **No flat `models.py` migration fallback.** Apps with one model still use a directory. The 10-second upfront cost beats the retrofit cost later.
+
+### Model family exception (narrow)
+
+Two or more models MAY share a single file ONLY when either:
+
+- One is abstract/base and the others are its concrete subtypes (e.g., `Payment` + `CardPayment` + `WirePayment`), AND the subtypes have no meaning or usage outside the base; OR
+- One is a "through" model for an M2M that exists solely within that relationship (e.g., `Membership` joining `User` and `Group`), AND the through model is never referenced independently.
+
+"They feel related", "they share a prefix", or "they have a FK between them" are NOT valid reasons. Use Django's string-based FK refs (`models.ForeignKey("app.Model", ...)`) to break circular imports — never combine files to avoid the import.
 
 ---
 
