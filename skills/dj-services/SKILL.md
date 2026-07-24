@@ -33,10 +33,6 @@ from orders.services.order import OrderService
 
 registry = svcs.Registry()
 
-# --- Repositories ---------------------------------------------------------
-registry.register_factory(ProductRepository, ProductRepository)
-registry.register_factory(OrderRepository, OrderRepository)
-
 
 # --- Services (factories pull repos from the container) ------------------
 def _product_service_factory(container: svcs.Container) -> ProductService:
@@ -50,8 +46,17 @@ def _order_service_factory(container: svcs.Container) -> OrderService:
     return OrderService(repo, product_repo)
 
 
-registry.register_factory(ProductService, _product_service_factory)
-registry.register_factory(OrderService, _order_service_factory)
+def register_services(registry: svcs.Registry) -> None:
+    """Register every real factory. Tests re-run this to restore overrides."""
+    # --- Repositories -----------------------------------------------------
+    registry.register_factory(ProductRepository, ProductRepository)
+    registry.register_factory(OrderRepository, OrderRepository)
+    # --- Services ---------------------------------------------------------
+    registry.register_factory(ProductService, _product_service_factory)
+    registry.register_factory(OrderService, _order_service_factory)
+
+
+register_services(registry)
 
 
 def get[T](service_type: type[T]) -> T:
@@ -61,6 +66,7 @@ def get[T](service_type: type[T]) -> T:
 
 Patterns to follow:
 
+- **All registrations live in `register_services(registry)`.** Called once at import; tests re-run it on teardown to restore any overridden factories through the public API.
 - **Repositories register themselves.** Use `register_factory(Repo, Repo)` — the class is its own factory because repositories take no constructor arguments.
 - **Services register via a named factory.** `_<entity>_service_factory(container)` resolves every dependency from the container and hands it to the service's `__init__`. No hidden imports, no module-level singletons.
 - **Register in dependency order.** Repos before services, lower-level services before higher-level ones. `svcs` doesn't enforce this, but it keeps the file readable.
@@ -233,7 +239,7 @@ This is the most important test layer — it proves the business logic is correc
 For integration tests that go through the API, override a factory to substitute a fake or a stub:
 
 ```python
-from project.services import registry
+from project.services import register_services, registry
 from products.services.product import ProductService
 
 
@@ -242,7 +248,7 @@ def fake_product_service():
     fake = MagicMock(spec=ProductService)
     registry.register_factory(ProductService, lambda _: fake)
     yield fake
-    # svcs re-registers on next call; reset to the real factory if other tests need it.
+    register_services(registry)  # restore the real factories via public API
 ```
 
 ## Common Mistakes

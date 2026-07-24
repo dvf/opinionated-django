@@ -22,7 +22,6 @@ Gather current project state by reading:
 - `src/project/api/__init__.py` — `NinjaAPI()`, mounted resource routers, exception handlers
 - `src/project/api/<resource>/` — existing per-resource route packages
 - `src/project/types.py` — `AuthedRequest` and other shared request types
-- `ARCHITECTURE.md` if present — full pattern reference
 - Any existing app the feature touches
 
 Then state your implementation plan: models, DTOs, repos, services, routes, tests, and ID prefixes.
@@ -294,21 +293,21 @@ def test_business_rule_rejects_bad_input():
 ```python
 @pytest.mark.django_db
 def test_create(client):
-    resp = client.post("/my-entities/", data={...}, content_type="application/json")
+    resp = client.post("/api/my-entities/", data={...}, content_type="application/json")
     assert resp.status_code == 201
     assert resp.json()["id"].startswith("xxx_")
 
 @pytest.mark.django_db
 def test_list_empty(client):
-    resp = client.get("/my-entities/")
+    resp = client.get("/api/my-entities/")
     assert resp.status_code == 200
     assert resp.json() == []
 
 @pytest.mark.django_db
 def test_get_by_id(client):
-    create_resp = client.post("/my-entities/", data={...}, content_type="application/json")
+    create_resp = client.post("/api/my-entities/", data={...}, content_type="application/json")
     eid = create_resp.json()["id"]
-    resp = client.get(f"/my-entities/{eid}/")
+    resp = client.get(f"/api/my-entities/{eid}/")
     assert resp.status_code == 200
     assert resp.json()["id"] == eid
 ```

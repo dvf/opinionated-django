@@ -109,17 +109,23 @@ import svcs
 
 registry = svcs.Registry()
 
-# Register repositories and services here as the project grows.
-# Example:
-# from products.repositories.product import ProductRepository
-# from products.services.product import ProductService
-#
-# registry.register_factory(ProductRepository, ProductRepository)
-#
-# def _product_service_factory(container: svcs.Container) -> ProductService:
-#     return ProductService(container.get(ProductRepository))
-#
-# registry.register_factory(ProductService, _product_service_factory)
+
+def register_services(registry: svcs.Registry) -> None:
+    """Register every real factory. Tests re-run this to restore overrides."""
+    # Register repositories and services here as the project grows.
+    # Example:
+    # from products.repositories.product import ProductRepository
+    # from products.services.product import ProductService
+    #
+    # registry.register_factory(ProductRepository, ProductRepository)
+    #
+    # def _product_service_factory(container: svcs.Container) -> ProductService:
+    #     return ProductService(container.get(ProductRepository))
+    #
+    # registry.register_factory(ProductService, _product_service_factory)
+
+
+register_services(registry)
 
 
 def get[T](service_type: type[T]) -> T:
@@ -132,6 +138,9 @@ def get[T](service_type: type[T]) -> T:
 Narrows `request.user` to a guaranteed-authenticated Django `User` so handlers don't have to deal with `AnonymousUser` unions.
 
 ```python
+# If the project swaps AUTH_USER_MODEL for a custom user (see dj-models),
+# import that model here instead — a stale stock-User import makes this
+# type silently wrong everywhere it's used.
 from django.contrib.auth.models import User
 from django.http import HttpRequest
 
@@ -159,6 +168,10 @@ from ninja import NinjaAPI
 # Import resource routers and mount them below.
 # from project.api.products import router as products_router
 
+# TODO: no auth wired — every route is public at this mount point.
+# `AuthedRequest` is a typing contract only; it enforces nothing at runtime.
+# Wire real auth before shipping, e.g. NinjaAPI(auth=django_auth) or a
+# per-router `auth=` argument.
 api = NinjaAPI()
 
 # api.add_router("/products", products_router)
@@ -268,7 +281,10 @@ class ReliableSignal(Signal):
 
     def send_reliable(self, sender, **kwargs) -> None:
         payload = json.dumps(kwargs)
-        for _, receiver in self._live_receivers(sender):
+        # _live_receivers() is a private Django API; since Django 5.0 it returns
+        # a (sync_receivers, async_receivers) tuple. Re-check on Django upgrades.
+        sync_receivers, async_receivers = self._live_receivers(sender)
+        for receiver in (*sync_receivers, *async_receivers):
             path = f"{receiver.__module__}.{receiver.__qualname__}"
             transaction.on_commit(
                 lambda p=path: _dispatch_reliable_receiver.delay(p, payload)

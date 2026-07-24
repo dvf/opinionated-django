@@ -105,19 +105,15 @@ def override_service():
             override_service(ProductService, fake)
             ...
     """
-    from project.services import registry
-
-    originals: dict[type, Any] = {}
+    from project.services import register_services, registry
 
     def _override(service_type: type, fake: Any) -> None:
-        originals.setdefault(service_type, registry._factories.get(service_type))
         registry.register_factory(service_type, lambda _container: fake)
 
     yield _override
 
-    for service_type, original in originals.items():
-        if original is not None:
-            registry._factories[service_type] = original
+    # Restore the real factories through the public API — no private internals.
+    register_services(registry)
 
 
 # ---- DTO builders ------------------------------------------------------
@@ -276,14 +272,14 @@ Services raise plain Python exceptions (`ValueError`, `LookupError`, `Permission
 def test_create_order_rejects_insufficient_stock(client):
     # Create a product with only 1 in stock.
     product_resp = client.post(
-        "/products/",
+        "/api/products/",
         data={"name": "Limited", "price": "5.00", "stock": 1},
         content_type="application/json",
     )
     product_id = product_resp.json()["id"]
 
     response = client.post(
-        "/orders/",
+        "/api/orders/",
         data={"items": [{"product_id": product_id, "quantity": 10}]},
         content_type="application/json",
     )

@@ -16,10 +16,9 @@ Signal receiver tasks are enqueued **inside the same database transaction** as t
 
 ## BEFORE WRITING CODE
 
-1. Read `ARCHITECTURE.md` if present for the full reliable signals reference
-2. Find existing signals with `Grep` for `ReliableSignal` under `src/`
-3. Find existing receivers with `Glob` for `src/**/receivers.py`
-4. Identify which service method should emit the signal and what data needs to travel with it
+1. Find existing signals with `Grep` for `ReliableSignal` under `src/`
+2. Find existing receivers with `Glob` for `src/**/receivers.py`
+3. Identify which service method should emit the signal and what data needs to travel with it
 
 ---
 
@@ -82,10 +81,15 @@ class MyAppConfig(AppConfig):
 Test receivers in isolation. Mock external dependencies. Verify idempotency by calling the receiver twice with the same arguments:
 
 ```python
-def test_receiver_is_idempotent():
+def test_receiver_is_idempotent(mocker):
+    # First call: not yet processed; second call: guard kicks in.
+    mocker.patch("my_app.receivers.already_processed", side_effect=[False, True])
+    do_work = mocker.patch("my_app.receivers.do_work")
+
     on_my_event(obj_id="xxx_fake")
     on_my_event(obj_id="xxx_fake")  # second call must be safe
-    # assert side-effect happened exactly once
+
+    assert do_work.call_count == 1
 ```
 
 ---
