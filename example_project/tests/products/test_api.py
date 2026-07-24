@@ -7,7 +7,7 @@ def test_list_products_empty(client):
     Test that GET /products/ returns an empty list when no products exist.
     """
     url = (
-        "/products/"  # We'll use hardcoded paths for now as we haven't defined urls.py
+        "/api/products/"
     )
     response = client.get(url)
 
@@ -20,7 +20,7 @@ def test_create_product(client):
     """
     Test that POST /products/ creates a new product and returns it.
     """
-    url = "/products/"
+    url = "/api/products/"
     data = {"name": "Test Product", "price": "10.00", "stock": 100}
     response = client.post(url, data=data, content_type="application/json")
 
@@ -39,7 +39,7 @@ def test_get_product_by_id(client):
     Test that GET /products/{id}/ returns the correct product.
     """
     # First create a product
-    create_url = "/products/"
+    create_url = "/api/products/"
     create_data = {"name": "Get Me", "price": "20.00", "stock": 50}
     create_response = client.post(
         create_url, data=create_data, content_type="application/json"
@@ -47,7 +47,7 @@ def test_get_product_by_id(client):
     product_id = create_response.json()["id"]
 
     # Then retrieve it
-    get_url = f"/products/{product_id}/"
+    get_url = f"/api/products/{product_id}/"
     response = client.get(get_url)
 
     assert response.status_code == 200

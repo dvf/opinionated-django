@@ -5,5 +5,5 @@ from .api import api
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", api.urls),
+    path("api/", api.urls),
 ]
