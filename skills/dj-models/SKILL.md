@@ -247,15 +247,33 @@ class OrderAdmin(admin.ModelAdmin):
 - **`search_fields`** — always include `id`. Add name/title fields if they exist. Never search on unindexed columns.
 - **`readonly_fields`** — always include `id` (ULID PKs should never be edited). Add computed or auto-set fields.
 - **`ordering`** — explicit ordering so the admin doesn't rely on the default PK sort. Use `-created_at` or the most natural time field.
-- **`fieldsets`** — structure the change view for readability. Always place identifiers (`id`, timestamps) in the first fieldset at the top so they're immediately visible. Group remaining fields logically:
+- **`fieldsets`** — structure the change view semantically in three bands. Always follow this exact pattern:
+
+  1. **Untitled (`None`) fieldset** — primary key and identity fields only (`id`, plus `email` / `slug` / natural key if the model has one). Renders with no collapsible header so identifiers are always visible at the top.
+  2. **Named semantic sections** — group remaining fields by meaning, not DB column order. Reusable section names: `"Personal Info"`, `"Details"`, `"Role & Permissions"`, `"Security"`, `"Relations"`. Use `"Details"` as the catchall when no more specific name fits.
+  3. **`"Important Dates"` (always last)** — every datetime field goes here: `created_at`, `updated_at`, `deleted_at`, `last_login`, `date_joined`, etc. Title is exactly `"Important Dates"` (title case).
+
   ```python
   fieldsets = (
-      (None, {"fields": ("id", "created_at", "updated_at")}),
+      (None, {"fields": ("id", "slug")}),
       ("Details", {"fields": ("name", "description", "status")}),
       ("Relations", {"fields": ("category",)}),
+      ("Important Dates", {"fields": ("created_at", "updated_at")}),
   )
   ```
-  The first fieldset (with `None` title) keeps IDs and timestamps prominent with no collapsible header. Use named sections for the rest.
+
+  Rationale: identity at top (always visible), domain in the middle (named so it's scannable), dates at the bottom (rarely the thing you're editing, and separating them keeps the top fieldset focused on identity).
+
+- **`add_fieldsets`** — for models that support admin creation (`User` primarily), provide a minimal `add_fieldsets` with just the required fields for a new record:
+  ```python
+  add_fieldsets = (
+      (None, {
+          "classes": ("wide",),
+          "fields": ("email", "password1", "password2"),
+      }),
+  )
+  ```
+  Keeps the "Add" form focused — the full `fieldsets` is for editing, not creation.
 - **`list_select_related`** — specify FK fields shown in `list_display` to avoid N+1 queries: `list_select_related = ("customer",)`
 - **`raw_id_fields`** — use for any FK to a large table. The default dropdown loads every row: `raw_id_fields = ("product",)`
 - **`extra = 0`** on inlines — never show empty inline forms by default.
@@ -264,6 +282,40 @@ class OrderAdmin(admin.ModelAdmin):
 - **No `list_filter` on unindexed columns** — filtering on unindexed columns causes full table scans.
 - **`autocomplete_fields`** — prefer over `raw_id_fields` when the related model has `search_fields` configured for a better UX: `autocomplete_fields = ("customer",)`
 - **`date_hierarchy`** — use on the primary date field if the model is time-series-like (orders, events, logs). Only use on indexed date fields.
+
+### Admin Actions
+
+Custom admin actions (the dropdown users select from on the changelist) MUST be **thin adapters** — never the home of business logic. The action receives a queryset, iterates it, delegates each row to a registered service via `get(Service)`, and reports the result via `self.message_user(request, ...)`.
+
+```python
+from django.contrib import admin
+
+from products.services.product import ProductService
+from project.services import get
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    actions = ["fulfill_selected_action"]
+
+    @admin.action(description="Fulfill selected orders")
+    def fulfill_selected_action(self, request, queryset):
+        count = 0
+        for order in queryset:
+            get(ProductService).fulfill_order(order.id)
+            count += 1
+        self.message_user(request, f"Fulfilled {count} orders.")
+```
+
+**Rules:**
+
+1. **Named `<verb>_<noun>_action`** and listed in `actions = [...]`. The `_action` suffix distinguishes them from regular `ModelAdmin` methods at a glance.
+2. **`@admin.action(description="...")`** is mandatory — the description is what users see in the dropdown. No emojis, no ALL-CAPS shouting.
+3. **Delegate to a service via `get(Service).method(id)`.** The action body MUST NOT contain ORM queries beyond iterating the incoming `queryset`, MUST NOT compute business logic, MUST NOT call external APIs directly.
+4. **Pass IDs, not model instances, to the service.** Matches the rest of the architecture — services deal in DTOs and `str` IDs.
+5. **Call `self.message_user()` with a result summary** — count, or a short outcome description. This is what users see after running the action.
+6. **Do NOT build Celery chains/groups in the action.** If the operation needs async orchestration, build the chain inside the service method; the action stays a thin adapter.
+7. **Error handling** — plain exceptions bubble up and Django renders them appropriately. Do not try/except in the action body; the service is where error semantics live.
 
 ---
 
