@@ -1,6 +1,6 @@
 ---
 name: dj-pytest
-description: Set up and write pytest tests for an op-django project — pytest-django configuration, Celery eager mode for reliable-signal tests, freezegun for time-sensitive logic, shared conftest fixtures for DTOs and svcs overrides, and the three-layer test convention (repository against a real DB, service against mocked repos, API through HTTP). Use when adding tests to a new project, writing tests for a new feature, setting up test infrastructure, or explaining how tests should be organized.
+description: Set up and write pytest tests for an op-django project — pytest-django configuration, two-sided Celery testing (patched dispatch sites + plain-function task bodies, never eager mode), freezegun for time-sensitive logic, shared conftest fixtures for DTOs and svcs overrides, and the three-layer test convention (repository against a real DB, service against mocked repos, API through HTTP). Use when adding tests to a new project, writing tests for a new feature, setting up test infrastructure, or explaining how tests should be organized.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
@@ -21,11 +21,12 @@ Service tests are the most valuable layer and should outnumber the others. If a 
 ## Dependencies
 
 ```bash
-uv add --dev pytest pytest-django pytest-celery freezegun pytest-mock
+uv add --dev pytest pytest-django pytest-xdist freezegun pytest-mock
 ```
 
-- **pytest-django** — the `django_db` marker, `client` fixture, settings integration.
-- **pytest-celery** — lets you run Celery tasks eagerly inside tests (critical for reliable-signal receivers).
+- **pytest-django** — the `django_db` marker, `client` fixture, settings integration, `django_capture_on_commit_callbacks`.
+- **pytest-xdist** — `-n auto` parallel runs. Keep it out of `addopts` so debugger runs stay serial.
+- **pytest-celery is deliberately absent** — tasks are never executed through Celery machinery in tests (see Celery in Tests).
 - **freezegun** — freezes `datetime.now()`, `time.time()`, and friends. Required for any logic that touches timestamps, TTLs, scheduled work, or ULIDs whose sort order matters to the test.
 - **pytest-mock** — the `mocker` fixture (a thin wrapper around `unittest.mock` with autouse cleanup).
 
@@ -55,15 +56,22 @@ Notes:
 
 ## Celery in Tests
 
-Reliable signals enqueue Celery tasks. For receivers to execute in-process during tests, set Celery to eager mode. Add to `src/project/settings.py` (or a test-only settings module):
+Tasks are tested two-sided, and **never executed through Celery machinery**:
+
+1. **Dispatch-site tests** — where business code calls `some_task.delay(...)` / `.apply_async(...)`, patch the task and assert it was dispatched with the right args.
+2. **Task-body tests** — call the task function directly as a plain function, with its dependencies mocked.
+
+Do NOT set `CELERY_TASK_ALWAYS_EAGER`. Eager mode executes tasks inline inside the test transaction, which breaks any task that opens its own connection ("Cannot open a new connection in an atomic block") and silently couples every service test to every receiver. It also tests less than it appears to: the dispatch args and the body still need their own assertions either way.
+
+The broker must be unreachable-by-design under pytest so an unpatched `.delay()` can never publish a real message (a live local broker means a dev worker will consume and execute test tasks against the dev database). Add to `src/project/settings.py`:
 
 ```python
 if "pytest" in sys.modules:
-    CELERY_TASK_ALWAYS_EAGER = True
-    CELERY_TASK_EAGER_PROPAGATES = True
+    CELERY_BROKER_URL = "memory://"          # unpatched .delay() lands in-process, drained by nobody
+    CELERY_RESULT_BACKEND = "cache+memory://"
 ```
 
-With eager mode on, `send_reliable()` still goes through `transaction.on_commit`, so tests that exercise reliable signals must run inside `@pytest.mark.django_db` with `transaction=True` so `on_commit` actually fires. More on that below.
+`send_reliable()` defers dispatch to `transaction.on_commit`. To flush those hooks in a test, use pytest-django's `django_capture_on_commit_callbacks(execute=True)` — not `django_db(transaction=True)`, which pays a full-table TRUNCATE teardown per test. More on that below.
 
 ## `tests/conftest.py`
 
@@ -105,15 +113,19 @@ def override_service():
             override_service(ProductService, fake)
             ...
     """
-    from project.services import register_services, registry
+    from project.services import registry
+
+    originals: dict[type, Any] = {}
 
     def _override(service_type: type, fake: Any) -> None:
+        originals.setdefault(service_type, registry._factories.get(service_type))
         registry.register_factory(service_type, lambda _container: fake)
 
     yield _override
 
-    # Restore the real factories through the public API — no private internals.
-    register_services(registry)
+    for service_type, original in originals.items():
+        if original is not None:
+            registry._factories[service_type] = original
 
 
 # ---- DTO builders ------------------------------------------------------
@@ -190,7 +202,7 @@ def test_get_by_id_round_trips():
 
 - Always assert on the **prefix** — it's a cheap proof the ULID generator is wired up.
 - Assert on the **DTO type** at least once per repo — catches a repo accidentally returning an ORM instance.
-- Use `@pytest.mark.django_db(transaction=True)` only when you need to exercise `transaction.on_commit` behavior (i.e. reliable-signal tests). It's significantly slower than the default.
+- To assert on `transaction.on_commit` behavior (i.e. reliable-signal dispatch), wrap the act step in `django_capture_on_commit_callbacks(execute=True)` under the plain marker. Reserve `@pytest.mark.django_db(transaction=True)` for tests that genuinely need real commits — thread-based concurrency tests, or code that reads from a second connection — because its teardown flushes every table and it is by far the slowest thing a test can ask for.
 
 ### `test_service.py` — No database
 
@@ -272,14 +284,14 @@ Services raise plain Python exceptions (`ValueError`, `LookupError`, `Permission
 def test_create_order_rejects_insufficient_stock(client):
     # Create a product with only 1 in stock.
     product_resp = client.post(
-        "/api/products/",
+        "/products/",
         data={"name": "Limited", "price": "5.00", "stock": 1},
         content_type="application/json",
     )
     product_id = product_resp.json()["id"]
 
     response = client.post(
-        "/api/orders/",
+        "/orders/",
         data={"items": [{"product_id": product_id, "quantity": 10}]},
         content_type="application/json",
     )
@@ -292,20 +304,23 @@ The equivalent `test_service.py` test should assert the raw exception (`with pyt
 
 ### Reliable-signal tests
 
-Receivers run via Celery. With `CELERY_TASK_ALWAYS_EAGER`, they execute in-process, but `transaction.on_commit` only fires when the transaction actually commits — which means you need the `transaction=True` flavor of the marker:
+Receivers run via Celery in production. In tests, cover each side separately: prove the dispatch was enqueued post-commit, and prove the receiver body works when called as a plain function.
 
 ```python
 import pytest
 
 from orders.receivers import on_order_created
-from orders.services.order import OrderService
 
 
-@pytest.mark.django_db(transaction=True)
-def test_order_created_triggers_receiver(mocker, make_product_dto):
-    spy = mocker.patch("orders.receivers.on_order_created", wraps=on_order_created)
-    # ...build real repos, call service.create_order(...), then:
-    spy.assert_called_once()
+@pytest.mark.django_db
+def test_order_created_dispatches_receiver(mocker, django_capture_on_commit_callbacks):
+    delay = mocker.patch("project.signals._dispatch_reliable_receiver.delay")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        # ...build real repos, call service.create_order(...)
+        ...
+
+    delay.assert_called_once()  # and assert on the receiver path + payload args
 
 
 def test_receiver_is_idempotent(mocker):
@@ -317,7 +332,7 @@ def test_receiver_is_idempotent(mocker):
     assert send_email.call_count == 1  # or whatever idempotency you've implemented
 ```
 
-The second test is the one that matters — **every receiver needs an explicit "called twice, ran once" test.** At-least-once delivery is non-negotiable and so is the test that proves you respected it.
+The `django_capture_on_commit_callbacks(execute=True)` context is what makes the first test honest: without it, `on_commit` hooks never fire under the plain marker and the dispatch assertion goes vacuous. The second test is the one that matters most — **every receiver needs an explicit "called twice, ran once" test.** At-least-once delivery is non-negotiable and so is the test that proves you respected it.
 
 ## freezegun
 
@@ -344,7 +359,8 @@ def test_expires_at_is_24h_from_now(make_product_dto):
 - **Reaching for `@pytest.mark.django_db` in a service test.** The service has an ORM import hiding in it. Fix the service, not the test.
 - **Using a fixture that returns a shared mutable object.** Tests mutate it, then order-dependence bites you. Use factories (`make_*`) instead.
 - **Asserting on `response.json() == {...}` with the full dict.** Too brittle. Assert on the fields you care about plus an ID prefix.
-- **Forgetting `transaction=True` on reliable-signal tests.** `on_commit` won't fire, the receiver won't run, and the test silently passes without exercising anything.
+- **Asserting reliable-signal dispatch without `django_capture_on_commit_callbacks(execute=True)`.** `on_commit` won't fire under the plain `django_db` marker, the dispatch never happens, and the test silently passes without exercising anything. (The inverse mistake — reaching for `django_db(transaction=True)` just to flush hooks — costs a full-table TRUNCATE per test.)
+- **Setting `CELERY_TASK_ALWAYS_EAGER` "to make the tests realistic".** It executes tasks inline inside the test transaction, breaks tasks that open their own connection, and still doesn't test dispatch args or the body in isolation. Patch `.delay()` at the dispatch site; call the body as a plain function.
 - **Testing Django internals.** Don't write a test that boils down to "does `.filter()` work?" — trust the framework and test your code.
 - **Missing the idempotency test.** Every reliable-signal receiver needs a test that proves calling it twice is safe.
 - **Asserting on a status code for a business-rule violation in a `test_service.py` file.** Service tests should use `pytest.raises`; only `test_api.py` round-trips through the exception handler.
