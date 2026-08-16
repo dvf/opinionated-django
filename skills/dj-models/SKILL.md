@@ -8,6 +8,79 @@ allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 
 You are defining or restructuring a Django model in an opinionated, fully type-safe Django project. Every convention below is mandatory. Do not deviate.
 
+## Base Model Inheritance
+
+Every concrete model MUST inherit from `project.models.BaseModel` (or `SoftDeleteModel` when soft-delete is needed). Bare `models.Model` is not allowed.
+
+`BaseModel` provides `created_at` / `updated_at` and declares `__prefix__` as a required class annotation. The primary key is still declared per-model (each model has its own `generate_<prefix>_id` generator), which keeps the prefixed-ULID convention intact.
+
+Add `src/project/models.py` once per project:
+
+```python
+from typing import ClassVar
+
+from django.db import models
+
+
+class BaseModel(models.Model):
+    """
+    Abstract base for all concrete models in the project.
+
+    Provides created_at / updated_at and declares __prefix__ as a required
+    class annotation. Subclasses MUST:
+      - Set __prefix__: ClassVar[str] = "xxx"
+      - Declare `id` with their own generate_<prefix>_id default
+    """
+
+    class Meta:
+        abstract = True
+
+    __prefix__: ClassVar[str]  # required on every subclass; no default
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SoftDeleteModel(BaseModel):
+    """
+    BaseModel + soft delete. Use for records that must retain history.
+    """
+
+    class Meta:
+        abstract = True
+
+    deleted_at = models.DateTimeField(null=True, blank=True)
+```
+
+Usage in a concrete model:
+
+```python
+from typing import ClassVar
+
+from django.db import models
+
+from project.ids import generate_ord_id
+from project.models import BaseModel
+
+
+class Order(BaseModel):
+    class Meta:
+        verbose_name = "order"
+        verbose_name_plural = "orders"
+
+    __prefix__: ClassVar[str] = "ord"
+    id = models.CharField(
+        max_length=64, primary_key=True, default=generate_ord_id, editable=False
+    )
+    # domain fields — no need to redeclare created_at / updated_at
+```
+
+**Why this layering:**
+- **`created_at` / `updated_at` are universal** — every model needs them for debuggability and audit. DRY this once.
+- **`__prefix__` and `id` stay per-model** — Django can't resolve `default=` at abstract level (each model needs its own prefix-specific generator), and declaring `__prefix__` per subclass enforces uniqueness at code-review time.
+- **`SoftDeleteModel` is opt-in** — most models hard-delete; soft-delete is for records with audit requirements (investor data, regulated entities). Separate class makes the choice explicit.
+- **No `save()` overrides, no custom managers, no soft-delete filtering logic** — those belong in repositories, not on models. See "No Business Logic" below.
+
 ## BEFORE WRITING CODE
 
 Read the model file being created or modified, plus:
@@ -21,7 +94,7 @@ Read the model file being created or modified, plus:
 
 ## Model Structure
 
-Every model follows this exact ordering of members:
+Every model follows this exact ordering of members. Inherit from `BaseModel` (or `SoftDeleteModel`) — `created_at` / `updated_at` come from the base and do not need re-declaration:
 
 ```python
 from typing import ClassVar
@@ -29,9 +102,10 @@ from typing import ClassVar
 from django.db import models
 
 from project.ids import generate_xxx_id
+from project.models import BaseModel
 
 
-class MyEntity(models.Model):
+class MyEntity(BaseModel):
     # 1. Meta — ALWAYS first, before any field
     class Meta:
         verbose_name = "my entity"
@@ -52,9 +126,8 @@ class MyEntity(models.Model):
     )
     slug = models.SlugField(max_length=255)
 
-    # 4. Time fields — created, updated, any dates/datetimes
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    # 4. Time fields — any date/datetime beyond created_at / updated_at (from BaseModel)
+    published_at = models.DateTimeField(null=True, blank=True)
 
     # 5. Workflow / status / state (if applicable)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
