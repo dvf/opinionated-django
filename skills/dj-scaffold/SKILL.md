@@ -72,7 +72,7 @@ Use `uv` for everything. Never `pip` or `poetry`.
 
 ```bash
 uv add 'django>=6.0' 'django-ninja>=1.6' 'pydantic>=2.0' 'svcs>=25.1' \
-       'python-ulid>=3.0' 'celery>=5.4' python-decouple
+       'python-ulid>=3.0' 'celery>=5.4' python-decouple dj-database-url
 uv add --dev ruff 'pyrefly>=0.42' django-stubs pytest pytest-django
 ```
 
