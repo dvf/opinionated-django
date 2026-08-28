@@ -13,6 +13,7 @@ dependencies = [
     "python-ulid>=3.1.0",
     "ruff>=0.15.8",
     "svcs>=25.1.0",
+    "whitenoise>=6.7",
 ]
 
 [dependency-groups]

@@ -72,9 +72,11 @@ Use `uv` for everything. Never `pip` or `poetry`.
 
 ```bash
 uv add 'django>=6.0' 'django-ninja>=1.6' 'pydantic>=2.0' 'svcs>=25.1' \
-       'python-ulid>=3.0' 'celery>=5.4' python-decouple
+       'python-ulid>=3.0' 'celery>=5.4' python-decouple 'whitenoise>=6.7'
 uv add --dev ruff 'pyrefly>=0.42' django-stubs pytest pytest-django
 ```
+
+`whitenoise` is a runtime dep, not a dev extra. Django's contrib-staticfiles middleware only serves admin assets under `manage.py runserver`; any other runtime (gunicorn, uvicorn, gunicorn+uvicorn workers) renders the admin unstyled without an external static-file server. Whitenoise restores admin styling in every runtime without requiring nginx. The middleware + `STORAGES` wiring lives in the `dj-settings` skill.
 
 Pyrefly auto-recognizes Django constructs as long as `django-stubs` is installed — no plugin, no `mypy_django_plugin`-style config. See [pyrefly.org/en/docs/django](https://pyrefly.org/en/docs/django/) for the current support matrix.
 
@@ -352,7 +354,10 @@ pythonpath = ["src"]
 
 ## Step 9: Verify
 
+Populate `STATIC_ROOT` so whitenoise has something to serve, then run the verification gate:
+
 ```bash
+uv run python src/manage.py collectstatic --noinput
 uv run python src/manage.py check
 uv run ruff check src
 uv run ruff format --check src
@@ -360,11 +365,11 @@ uv run pyrefly check src
 uv run pytest
 ```
 
-All five must pass. Fix any issue rather than silencing it.
+All six must pass. Fix any issue rather than silencing it. `collectstatic` is part of the gate (not a one-time setup step) because admin asset breakage is a regression class that only surfaces when statics are actually gathered.
 
 ## COMPLETION CHECKLIST
 
-- [ ] Dependencies added via `uv add`
+- [ ] Dependencies added via `uv add` (including `whitenoise>=6.7`)
 - [ ] `src/project/ids.py` with `_make_generator` helper
 - [ ] `src/project/services.py` with `registry` and `get()`
 - [ ] `src/project/types.py` with `AuthedRequest`
@@ -373,8 +378,8 @@ All five must pass. Fix any issue rather than silencing it.
 - [ ] `src/project/signals.py` with `ReliableSignal` base
 - [ ] `src/project/celery.py` + `__init__.py` export
 - [ ] `urls.py` mounts `api.urls`
-- [ ] Settings organized via the `dj-settings` skill
+- [ ] Settings organized via the `dj-settings` skill (including `WhiteNoiseMiddleware` after `SecurityMiddleware` and `STORAGES["staticfiles"]` set to `CompressedManifestStaticFilesStorage`)
 - [ ] `pyproject.toml` has ruff / pyrefly / pytest config
-- [ ] `django check`, ruff, pyrefly, pytest all pass
+- [ ] `collectstatic`, `django check`, ruff, pyrefly, pytest all pass
 
 Once this checklist is complete, the `dj-architecture` and `dj-signals` skills can build features on top without any extra setup.

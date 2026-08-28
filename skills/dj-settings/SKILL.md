@@ -39,7 +39,7 @@ Settings must appear in this order. Omit sections that have no settings.
 9. **SESSIONS**
 10. **CACHING**
 11. **INTERNATIONALIZATION** — `LANGUAGE_CODE`, `TIME_ZONE`, `USE_I18N`, `USE_TZ`
-12. **STATIC FILES** — `STATIC_URL`, `STATIC_ROOT`, `DEFAULT_AUTO_FIELD`
+12. **STATIC FILES** — `STATIC_URL`, `STATIC_ROOT`, `STORAGES`, `DEFAULT_AUTO_FIELD`
 13. **CELERY** — all `CELERY_*` settings
 14. Any additional project-specific sections in alphabetical order
 
@@ -62,6 +62,44 @@ INSTALLED_APPS = [
 ```
 
 Project apps must use the dotted path to their `AppConfig` subclass (e.g., `"myapp.apps.MyAppConfig"`), not the short app name.
+
+## `MIDDLEWARE` Position Contract
+
+`whitenoise.middleware.WhiteNoiseMiddleware` MUST appear **immediately after** `django.middleware.security.SecurityMiddleware` and **before** `django.contrib.sessions.middleware.SessionMiddleware`:
+
+```python
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+```
+
+This position is non-negotiable: whitenoise must run after security headers are applied but before anything that could short-circuit the response or open a session. A misplaced `WhiteNoiseMiddleware` fails silently — the static-file shortcut is skipped and every request falls through to Django's view layer, so the symptom is "everything is slower" rather than a loud error. The position is enforced by a contract test (`example_project/tests/test_settings_middleware.py`).
+
+In the STATIC FILES section, pair this with:
+
+```python
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
+
+if DEBUG:
+    WHITENOISE_USE_FINDERS = True
+    WHITENOISE_AUTOREFRESH = True
+```
+
+`CompressedStaticFilesStorage` gives gzip + brotli precompression without filename hashing or a `staticfiles.json` manifest. `STATIC_ROOT` MUST be set (e.g., `BASE_DIR / "staticfiles"`) so `collectstatic` has somewhere to write — whitenoise serves from `STATIC_ROOT`, not from each app's `static/` directory. Under `DEBUG`, `WHITENOISE_USE_FINDERS = True` + `WHITENOISE_AUTOREFRESH = True` let whitenoise serve and re-scan app `static/` dirs without re-running `collectstatic` between edits.
+
+**Do NOT use `CompressedManifestStaticFilesStorage`.** The manifest variant hashes filenames and emits a `staticfiles.json` that is **required** at request time — without it, the storage class raises `ValueError: Missing staticfiles manifest entry for '<path>'` on any `DEBUG=False` request that touches a static-asset URL (e.g., every admin login page). That blows up CI suites that exercise `DEBUG=False` branches without running `collectstatic` first, and 500s any deploy whose pipeline hasn't been wired with a `collectstatic` step. Manifest-mode is a real production cache-busting gain, but it is opt-in via a future ADR once the deploy pipeline has a real `collectstatic` step. The contract test in `example_project/tests/test_settings_middleware.py` fails if the scaffolded settings.py references the manifest variant at all.
+
+The rationale for shipping whitenoise by default is in operator ledger ADR 0004.
 
 ## Rules
 
